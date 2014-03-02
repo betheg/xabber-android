@@ -34,7 +34,7 @@ import org.jivesoftware.smack.packet.Packet;
 import org.jivesoftware.smack.packet.PacketExtension;
 import org.jivesoftware.smack.packet.Presence;
 import org.jivesoftware.smackx.FormField;
-import org.jivesoftware.smackx.packet.CapsExtension;
+import org.jivesoftware.smackx.entitycaps.packet.CapsExtension;
 import org.jivesoftware.smackx.packet.DataForm;
 import org.jivesoftware.smackx.packet.DiscoverInfo;
 import org.jivesoftware.smackx.packet.DiscoverInfo.Feature;
@@ -441,11 +441,11 @@ public class CapabilitiesManager implements OnAuthorizedListener,
 				if (packetExtension instanceof CapsExtension) {
 					CapsExtension capsExtension = (CapsExtension) packetExtension;
 					if (capsExtension.getNode() == null
-							|| capsExtension.getVersion() == null)
+							|| capsExtension.getVer() == null)
 						continue;
 					Capability capability = new Capability(account, user,
 							capsExtension.getHash(), capsExtension.getNode(),
-							capsExtension.getVersion());
+							capsExtension.getVer());
 					if (capability.equals(userCapabilities.get(account, user)))
 						continue;
 					userCapabilities.put(account, user, capability);

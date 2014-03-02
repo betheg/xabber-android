@@ -1,7 +1,7 @@
 /**
  * $RCSfile$
- * $Revision: 7071 $
- * $Date: 2007-02-12 08:59:05 +0800 (Mon, 12 Feb 2007) $
+ * $Revision$
+ * $Date$
  *
  * Copyright 2003-2007 Jive Software.
  *
@@ -21,10 +21,12 @@
 package org.jivesoftware.smackx.packet;
 
 import org.jivesoftware.smack.packet.IQ;
-import org.jivesoftware.smack.packet.PacketExtension;
+import org.jivesoftware.smack.util.StringUtils;
 
+import java.util.Collection;
 import java.util.Collections;
 import java.util.Iterator;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 
@@ -39,9 +41,41 @@ import java.util.concurrent.CopyOnWriteArrayList;
  */
 public class DiscoverInfo extends IQ {
 
+    public static final String NAMESPACE = "http://jabber.org/protocol/disco#info";
+
     private final List<Feature> features = new CopyOnWriteArrayList<Feature>();
     private final List<Identity> identities = new CopyOnWriteArrayList<Identity>();
     private String node;
+
+    public DiscoverInfo() {
+        super();
+    }
+
+    /**
+     * Copy constructor
+     * 
+     * @param d
+     */
+    public DiscoverInfo(DiscoverInfo d) {
+        super(d);
+
+        // Set node
+        setNode(d.getNode());
+
+        // Copy features
+        synchronized (d.features) {
+            for (Feature f : d.features) {
+                addFeature(f);
+            }
+        }
+
+        // Copy identities
+        synchronized (d.identities) {
+            for (Identity i : d.identities) {
+                addIdentity(i);
+            }
+        }
+    }
 
     /**
      * Adds a new feature to the discovered information.
@@ -52,8 +86,22 @@ public class DiscoverInfo extends IQ {
         addFeature(new Feature(feature));
     }
 
+    /**
+     * Adds a collection of features to the packet. Does noting if featuresToAdd is null.
+     *
+     * @param featuresToAdd
+     */
+    public void addFeatures(Collection<String> featuresToAdd) {
+        if (featuresToAdd == null) return;
+        for (String feature : featuresToAdd) {
+            addFeature(feature);
+        }
+    }
+
     private void addFeature(Feature feature) {
-        features.add(feature);
+        synchronized (features) {
+            features.add(feature);
+        }
     }
 
     /**
@@ -62,7 +110,9 @@ public class DiscoverInfo extends IQ {
      * @return an Iterator on the discovered features of an XMPP entity
      */
     public Iterator<Feature> getFeatures() {
-        return Collections.unmodifiableList(features).iterator();
+        synchronized (features) {
+            return Collections.unmodifiableList(features).iterator();
+        }
     }
 
     /**
@@ -71,7 +121,21 @@ public class DiscoverInfo extends IQ {
      * @param identity the discovered entity's identity
      */
     public void addIdentity(Identity identity) {
-        identities.add(identity);
+        synchronized (identities) {
+            identities.add(identity);
+        }
+    }
+
+    /**
+     * Adds identities to the DiscoverInfo stanza
+     * 
+     * @param identitiesToAdd
+     */
+    public void addIdentities(Collection<Identity> identitiesToAdd) {
+        if (identitiesToAdd == null) return;
+        synchronized (identities) {
+            identities.addAll(identitiesToAdd);
+        }
     }
 
     /**
@@ -80,7 +144,9 @@ public class DiscoverInfo extends IQ {
      * @return an Iterator on the discoveted identities 
      */
     public Iterator<Identity> getIdentities() {
-        return Collections.unmodifiableList(identities).iterator();
+        synchronized (identities) {
+            return Collections.unmodifiableList(identities).iterator();
+        }
     }
 
     /**
@@ -125,18 +191,22 @@ public class DiscoverInfo extends IQ {
 
     public String getChildElementXML() {
         StringBuilder buf = new StringBuilder();
-        buf.append("<query xmlns=\"http://jabber.org/protocol/disco#info\"");
+        buf.append("<query xmlns=\"" + NAMESPACE + "\"");
         if (getNode() != null) {
             buf.append(" node=\"");
-            buf.append(getNode());
+            buf.append(StringUtils.escapeForXML(getNode()));
             buf.append("\"");
         }
         buf.append(">");
-        for (Identity identity : identities) {
-            buf.append(identity.toXML());
+        synchronized (identities) {
+            for (Identity identity : identities) {
+                buf.append(identity.toXML());
+            }
         }
-        for (Feature feature : features) {
-            buf.append(feature.toXML());
+        synchronized (features) {
+            for (Feature feature : features) {
+                buf.append(feature.toXML());
+            }
         }
         // Add packet extensions, if any are defined.
         buf.append(getExtensionsXML());
@@ -144,28 +214,38 @@ public class DiscoverInfo extends IQ {
         return buf.toString();
     }
 
-    public DiscoverInfo clone() {
-        DiscoverInfo d = new DiscoverInfo();
-
-        // Set node
-        d.setNode(getNode());
-
-        // Copy features
-        for (Feature f : features) {
-            d.addFeature(f);
-        }
-
-        // Copy identities
+    /**
+     * Test if a DiscoverInfo response contains duplicate identities.
+     * 
+     * @return true if duplicate identities where found, otherwise false
+     */
+    public boolean containsDuplicateIdentities() {
+        List<Identity> checkedIdentities = new LinkedList<Identity>();
         for (Identity i : identities) {
-            d.addIdentity(i);
+            for (Identity i2 : checkedIdentities) {
+                if (i.equals(i2))
+                    return true;
+            }
+            checkedIdentities.add(i);
         }
-        
-        // Copy extensions
-        for (PacketExtension pe : getExtensions()) {
-            d.addExtension(pe);
-        }
+        return false;
+    }
 
-        return d;
+    /**
+     * Test if a DiscoverInfo response contains duplicate features.
+     * 
+     * @return true if duplicate identities where found, otherwise false
+     */
+    public boolean containsDuplicateFeatures() {
+        List<Feature> checkedFeatures = new LinkedList<Feature>();
+        for (Feature f : features) {
+            for (Feature f2 : checkedFeatures) {
+                if (f.equals(f2))
+                    return true;
+            }
+            checkedFeatures.add(f);
+        }
+        return false;
     }
 
     /**
@@ -177,22 +257,41 @@ public class DiscoverInfo extends IQ {
      * attributes.
      * 
      */
-    public static class Identity {
+    public static class Identity implements Comparable<Identity> {
 
         private String category;
         private String name;
-        private String language;
         private String type;
+        private String lang; // 'xml:lang;
 
         /**
          * Creates a new identity for an XMPP entity.
          * 
          * @param category the entity's category.
          * @param name the entity's name.
+         * @deprecated As per the spec, the type field is mandatory and the 3 argument constructor should be used instead.
          */
         public Identity(String category, String name) {
             this.category = category;
             this.name = name;
+        }
+        
+        /**
+         * Creates a new identity for an XMPP entity.
+         * 'category' and 'type' are required by 
+         * <a href="http://xmpp.org/extensions/xep-0030.html#schemas">XEP-30 XML Schemas</a>
+         * 
+         * @param category the entity's category (required as per XEP-30).
+         * @param name the entity's name.
+         * @param type the entity's type (required as per XEP-30).
+         */
+        public Identity(String category, String name, String type) {
+            if ((category == null) || (type == null))
+                throw new IllegalArgumentException("category and type cannot be null");
+            
+            this.category = category;
+            this.name = name;
+            this.type = type;
         }
 
         /**
@@ -213,7 +312,16 @@ public class DiscoverInfo extends IQ {
         public String getName() {
             return name;
         }
-
+        
+        /**
+         * Set the identity's name.
+         * 
+         * @param name
+         */
+        public void setName(String name) {
+            this.name = name;
+        }
+        
         /**
          * Returns the entity's type. To get the official registry of values for the 
          * 'type' attribute refer to <a href="http://www.jabber.org/registrar/disco-categories.html">Jabber::Registrar</a> 
@@ -235,35 +343,119 @@ public class DiscoverInfo extends IQ {
         }
 
         /**
-         * Returns the name's language. 
-         *
-         * @return the name's language.
+         * Sets the natural language (xml:lang) for this identity (optional)
+         * 
+         * @param lang the xml:lang of this Identity
          */
-        public String getLanguage() {
-            return language;
+        public void setLanguage(String lang) {
+            this.lang = lang;
         }
 
         /**
-         * Sets the name's language. 
-         *
-         * @param type the name's language.
+         * Returns the identities natural language if one is set
+         * 
+         * @return the value of xml:lang of this Identity
          */
-        public void setLanguage(String language) {
-            this.language = language;
+        public String getLanguage() {
+            return lang;
         }
 
         public String toXML() {
             StringBuilder buf = new StringBuilder();
-            buf.append("<identity category=\"").append(category).append("\"");
-            buf.append(" name=\"").append(name).append("\"");
+            buf.append("<identity");
+            // Check if this packet has 'lang' set and maybe append it to the resulting string
+            if (lang != null)
+                buf.append(" xml:lang=\"").append(StringUtils.escapeForXML(lang)).append("\"");
+            // Category must always be set
+            buf.append(" category=\"").append(StringUtils.escapeForXML(category)).append("\"");
+            // Name must always be set
+            buf.append(" name=\"").append(StringUtils.escapeForXML(name)).append("\"");
+            // Check if this packet has 'type' set and maybe append it to the resulting string
             if (type != null) {
-                buf.append(" type=\"").append(type).append("\"");
-            }
-            if (language != null) {
-                buf.append(" xml:lang=\"").append(language).append("\"");
+                buf.append(" type=\"").append(StringUtils.escapeForXML(type)).append("\"");
             }
             buf.append("/>");
             return buf.toString();
+        }
+
+        /** 
+         * Check equality for Identity  for category, type, lang and name
+         * in that order as defined by
+         * <a href="http://xmpp.org/extensions/xep-0115.html#ver-proc">XEP-0015 5.4 Processing Method (Step 3.3)</a>
+         *  
+         */
+        public boolean equals(Object obj) {
+            if (obj == null)
+                return false;
+            if (obj == this)
+                return true;
+            if (obj.getClass() != getClass())
+                return false;
+
+            DiscoverInfo.Identity other = (DiscoverInfo.Identity) obj;
+            if (!this.category.equals(other.category))
+                return false;
+
+            String otherLang = other.lang == null ? "" : other.lang;
+            String thisLang = lang == null ? "" : lang;
+            if (!otherLang.equals(thisLang))
+                return false;
+            
+            // This safeguard can be removed once the deprecated constructor is removed.
+            String otherType = other.type == null ? "" : other.type;
+            String thisType = type == null ? "" : type;
+            if (!otherType.equals(thisType))
+                return false;
+
+            String otherName = other.name == null ? "" : other.name;
+            String thisName = name == null ? "" : other.name;
+            if (!thisName.equals(otherName))
+                return false;
+
+            return true;
+        }
+        
+        @Override
+        public int hashCode() {
+            int result = 1;
+            result = 37 * result + category.hashCode();
+            result = 37 * result + (lang == null ? 0 : lang.hashCode());
+            result = 37 * result + (type == null ? 0 : type.hashCode());
+            result = 37 * result + (name == null ? 0 : name.hashCode());
+            return result;
+        }
+
+        /**
+         * Compares this identity with another one. The comparison order is:
+         * Category, Type, Lang. If all three are identical the other Identity is considered equal.
+         * Name is not used for comparision, as defined by XEP-0115
+         * 
+         * @param obj
+         * @return
+         */
+        public int compareTo(DiscoverInfo.Identity other) {
+            String otherLang = other.lang == null ? "" : other.lang;
+            String thisLang = lang == null ? "" : lang;
+            
+            // This can be removed once the deprecated constructor is removed.
+            String otherType = other.type == null ? "" : other.type;
+            String thisType = type == null ? "" : type;
+
+            if (category.equals(other.category)) {
+                if (thisType.equals(otherType)) {
+                    if (thisLang.equals(otherLang)) {
+                        // Don't compare on name, XEP-30 says that name SHOULD
+                        // be equals for all identities of an entity
+                        return 0;
+                    } else {
+                        return thisLang.compareTo(otherLang);
+                    }
+                } else {
+                    return thisType.compareTo(otherType);
+                }
+            } else {
+                return category.compareTo(other.category);
+            }
         }
     }
 
@@ -283,6 +475,8 @@ public class DiscoverInfo extends IQ {
          * @param variable the feature's variable.
          */
         public Feature(String variable) {
+            if (variable == null)
+                throw new IllegalArgumentException("variable cannot be null");
             this.variable = variable;
         }
 
@@ -297,8 +491,25 @@ public class DiscoverInfo extends IQ {
 
         public String toXML() {
             StringBuilder buf = new StringBuilder();
-            buf.append("<feature var=\"").append(variable).append("\"/>");
+            buf.append("<feature var=\"").append(StringUtils.escapeForXML(variable)).append("\"/>");
             return buf.toString();
+        }
+
+        public boolean equals(Object obj) {
+            if (obj == null)
+                return false;
+            if (obj == this)
+                return true;
+            if (obj.getClass() != getClass())
+                return false;
+
+            DiscoverInfo.Feature other = (DiscoverInfo.Feature) obj;
+            return variable.equals(other.variable);
+        }
+
+        @Override
+        public int hashCode() {
+            return 37 * variable.hashCode();
         }
     }
 }

@@ -38,9 +38,6 @@ public interface WriterListener {
      */
     public abstract void write(String str);
 
-	/**
-	 * Notification that the Writer has been closed.
-	 */
 	public abstract void close();
 
 }

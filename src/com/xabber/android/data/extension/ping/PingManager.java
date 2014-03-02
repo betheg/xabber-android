@@ -19,7 +19,7 @@ import org.jivesoftware.smack.ConnectionCreationListener;
 import org.jivesoftware.smack.packet.IQ;
 import org.jivesoftware.smack.packet.Packet;
 import org.jivesoftware.smackx.ServiceDiscoveryManager;
-import org.jivesoftware.smackx.packet.Ping;
+import org.jivesoftware.smackx.ping.packet.Ping;
 
 import com.xabber.android.data.Application;
 import com.xabber.android.data.LogManager;

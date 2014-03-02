@@ -22,6 +22,8 @@ import java.util.Map;
 import org.jivesoftware.smack.packet.PacketExtension;
 import org.jivesoftware.smack.provider.PacketExtensionProvider;
 import org.jivesoftware.smack.util.PacketParserUtils;
+import org.jivesoftware.smackx.pubsub.provider.ItemProvider;
+import org.jivesoftware.smackx.pubsub.provider.ItemsProvider;
 import org.xmlpull.v1.XmlPullParser;
 
 /**
@@ -76,6 +78,8 @@ import org.xmlpull.v1.XmlPullParser;
  * </pre>
  * 
  * @author Robin Collier
+ * 
+ * @deprecated This has been moved to {@link org.jivesoftware.smack.provider.EmbeddedExtensionProvider}
  */
 abstract public class EmbeddedExtensionProvider implements PacketExtensionProvider
 {

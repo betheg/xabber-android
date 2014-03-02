@@ -28,6 +28,10 @@ package org.jivesoftware.smackx;
  */
 public enum ChatState {
     /**
+     * User is actively participating in the chat session.
+     */
+    active,
+    /**
      * User is composing a message.
      */
     composing,
@@ -35,10 +39,6 @@ public enum ChatState {
      * User had been composing but now has stopped.
      */
     paused,
-    /**
-     * User is actively participating in the chat session.
-     */
-    active,
     /**
      * User has not been actively participating in the chat session.
      */

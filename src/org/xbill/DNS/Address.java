@@ -232,12 +232,27 @@ toDottedQuad(int [] addr) {
 }
 
 private static Record []
-lookupHostName(String name) throws UnknownHostException {
+lookupHostName(String name, boolean all) throws UnknownHostException {
 	try {
-		Record [] records = new Lookup(name).run();
-		if (records == null)
+		Lookup lookup = new Lookup(name, Type.A);
+		Record [] a = lookup.run();
+		if (a == null) {
+			if (lookup.getResult() == Lookup.TYPE_NOT_FOUND) {
+				Record [] aaaa = new Lookup(name, Type.AAAA).run();
+				if (aaaa != null)
+					return aaaa;
+			}
 			throw new UnknownHostException("unknown host");
-		return records;
+		}
+		if (! all)
+			return a;
+		Record [] aaaa = new Lookup(name, Type.AAAA).run();
+		if (aaaa == null)
+			return a;
+		Record [] merged = new Record[a.length + aaaa.length];
+		System.arraycopy(a, 0, merged, 0, a.length);
+		System.arraycopy(aaaa, 0, merged, a.length, aaaa.length);
+		return merged;
 	}
 	catch (TextParseException e) {
 		throw new UnknownHostException("invalid name");
@@ -246,8 +261,13 @@ lookupHostName(String name) throws UnknownHostException {
 
 private static InetAddress
 addrFromRecord(String name, Record r) throws UnknownHostException {
-	ARecord a = (ARecord) r;
-	return InetAddress.getByAddress(name, a.getAddress().getAddress());
+	InetAddress addr;
+	if (r instanceof ARecord) {
+		addr = ((ARecord)r).getAddress();
+	} else {
+		addr = ((AAAARecord)r).getAddress();
+	}
+	return InetAddress.getByAddress(name, addr.getAddress());
 }
 
 /**
@@ -261,7 +281,7 @@ getByName(String name) throws UnknownHostException {
 	try {
 		return getByAddress(name);
 	} catch (UnknownHostException e) {
-		Record [] records = lookupHostName(name);
+		Record [] records = lookupHostName(name, false);
 		return addrFromRecord(name, records[0]);
 	}
 }
@@ -278,7 +298,7 @@ getAllByName(String name) throws UnknownHostException {
 		InetAddress addr = getByAddress(name);
 		return new InetAddress[] {addr};
 	} catch (UnknownHostException e) {
-		Record [] records = lookupHostName(name);
+		Record [] records = lookupHostName(name, true);
 		InetAddress [] addrs = new InetAddress[records.length];
 		for (int i = 0; i < records.length; i++)
 			addrs[i] = addrFromRecord(name, records[i]);
@@ -298,10 +318,10 @@ getByAddress(String addr) throws UnknownHostException {
 	byte [] bytes;
 	bytes = toByteArray(addr, IPv4);
 	if (bytes != null)
-		return InetAddress.getByAddress(bytes);
+		return InetAddress.getByAddress(addr, bytes);
 	bytes = toByteArray(addr, IPv6);
 	if (bytes != null)
-		return InetAddress.getByAddress(bytes);
+		return InetAddress.getByAddress(addr, bytes);
 	throw new UnknownHostException("Invalid address: " + addr);
 }
 
@@ -321,7 +341,7 @@ getByAddress(String addr, int family) throws UnknownHostException {
 	byte [] bytes;
 	bytes = toByteArray(addr, family);
 	if (bytes != null)
-		return InetAddress.getByAddress(bytes);
+		return InetAddress.getByAddress(addr, bytes);
 	throw new UnknownHostException("Invalid address: " + addr);
 }
 

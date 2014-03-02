@@ -44,10 +44,10 @@ import java.util.*;
 public class PrivacyListManager {
 
     // Keep the list of instances of this class.
-	private static Map<Connection, WeakReference<PrivacyListManager>> instances =
-	    new WeakHashMap<Connection, WeakReference<PrivacyListManager>>();
+    private static Map<Connection, PrivacyListManager> instances = Collections
+            .synchronizedMap(new WeakHashMap<Connection, PrivacyListManager>());
 
-	private Connection connection;
+	private WeakReference<Connection> connection;
 	private final List<PrivacyListListener> listeners = new ArrayList<PrivacyListListener>();
 	PacketFilter packetFilter = new AndFilter(new IQTypeFilter(IQ.Type.SET),
     		new PacketExtensionFilter("query", "jabber:iq:privacy"));
@@ -58,7 +58,7 @@ public class PrivacyListManager {
         // instance when the connection is closed.
         Connection.addConnectionCreationListener(new ConnectionCreationListener() {
             public void connectionCreated(Connection connection) {
-                new PrivacyListManager(connection);
+                getInstanceFor(connection);
             }
         });
     }
@@ -69,60 +69,10 @@ public class PrivacyListManager {
      *
      * @param connection the XMPP connection.
      */
-	private PrivacyListManager(Connection connection) {
-        this.connection = connection;
-        this.init();
-    }
-
-	/** Answer the connection userJID that owns the privacy.
-	 * @return the userJID that owns the privacy
-	 */
-	private String getUser() {
-		return connection.getUser();
-	}
-
-    /**
-     * Initializes the packet listeners of the connection that will notify for any set privacy 
-     * package. 
-     */
-    private void init() {
+	private PrivacyListManager(final Connection connection) {
+        this.connection = new WeakReference<Connection>(connection);
         // Register the new instance and associate it with the connection 
-        synchronized (PrivacyListManager.class) {
-            instances.put(connection, new WeakReference<PrivacyListManager>(this));
-        }
-        // Add a listener to the connection that removes the registered instance when
-        // the connection is closed
-        connection.addConnectionListener(new ConnectionListener() {
-            public void connectionClosed() {
-                // Unregister this instance since the connection has been closed
-                synchronized (PrivacyListManager.class) {
-                    instances.remove(connection);
-                }
-            }
-
-            public void connectionClosedOnError(Exception e) {
-                // Unregister this instance since the connection has been closed
-                synchronized (PrivacyListManager.class) {
-                    instances.remove(connection);
-            	}
-            }
-
-            public void reconnectionSuccessful() {
-                // Register this instance since the connection has been
-                // reestablished
-                synchronized (PrivacyListManager.class) {
-                    instances.put(connection, new WeakReference<PrivacyListManager>(PrivacyListManager.this));
-                }
-            }
-
-            public void reconnectionFailed(Exception e) {
-                // ignore
-            }
-
-            public void reconnectingIn(int seconds) {
-                // ignore
-            }
-        });
+        instances.put(connection, this);
 
         connection.addPacketListener(new PacketListener() {
             public void processPacket(Packet packet) {
@@ -164,8 +114,14 @@ public class PrivacyListManager {
                 // Send create & join packet.
                 connection.sendPacket(iq);
             }
-        }, packetFilter);
-    }
+        }, packetFilter);    }
+
+	/** Answer the connection userJID that owns the privacy.
+	 * @return the userJID that owns the privacy
+	 */
+	private String getUser() {
+		return connection.get().getUser();
+	}
 
     /**
      * Returns the PrivacyListManager instance associated with a given Connection.
@@ -173,12 +129,10 @@ public class PrivacyListManager {
      * @param connection the connection used to look for the proper PrivacyListManager.
      * @return the PrivacyListManager associated with a given Connection.
      */
-    public synchronized static PrivacyListManager getInstanceFor(Connection connection) {
-        WeakReference<PrivacyListManager> reference = instances.get(connection);
-        if (reference == null)
-            return null;
-        else
-            return reference.get();
+    public static synchronized PrivacyListManager getInstanceFor(Connection connection) {
+        PrivacyListManager plm = instances.get(connection);
+        if (plm == null) plm = new PrivacyListManager(connection);
+        return plm;
     }
     
 	/**
@@ -191,6 +145,8 @@ public class PrivacyListManager {
 	 * @exception XMPPException if the request or the answer failed, it raises an exception.
 	 */ 
 	private Privacy getRequest(Privacy requestPrivacy) throws XMPPException {
+        Connection connection = PrivacyListManager.this.connection.get();
+        if (connection == null) throw new XMPPException("Connection instance already gc'ed");
 		// The request is a get iq type
 		requestPrivacy.setType(Privacy.Type.GET);
 		requestPrivacy.setFrom(this.getUser());
@@ -229,7 +185,8 @@ public class PrivacyListManager {
 	 * @exception XMPPException if the request or the answer failed, it raises an exception.
 	 */ 
 	private Packet setRequest(Privacy requestPrivacy) throws XMPPException {
-		
+        Connection connection = PrivacyListManager.this.connection.get();
+        if (connection == null) throw new XMPPException("Connection instance already gc'ed");
 		// The request is a get iq type
 		requestPrivacy.setType(Privacy.Type.SET);
 		requestPrivacy.setFrom(this.getUser());

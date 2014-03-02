@@ -21,13 +21,9 @@
 package org.jivesoftware.smackx.packet;
 
 import org.jivesoftware.smack.packet.PacketExtension;
+import org.jivesoftware.smackx.Form;
 import org.jivesoftware.smackx.FormField;
-import org.xmlpull.v1.XmlSerializer;
 
-import com.xabber.xmpp.Instance;
-import com.xabber.xmpp.SerializerUtils;
-
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Iterator;
@@ -39,12 +35,9 @@ import java.util.List;
  *
  * @author Gaston Dombiak
  */
-public class DataForm implements PacketExtension, Instance {
+public class DataForm implements PacketExtension {
 
-    public static final String ELEMENT_NAME = "x";
-	public static final String NAMESPACE = "jabber:x:data";
-    
-	private String type;
+    private String type;
     private String title;
     private List<String> instructions = new ArrayList<String>();
     private ReportedData reportedData;
@@ -131,11 +124,11 @@ public class DataForm implements PacketExtension, Instance {
     }
 
     public String getElementName() {
-        return ELEMENT_NAME;
+        return Form.ELEMENT;
     }
 
     public String getNamespace() {
-        return NAMESPACE;
+        return Form.NAMESPACE;
     }
 
     /**
@@ -203,34 +196,47 @@ public class DataForm implements PacketExtension, Instance {
         }
     }
 
-	@Override
-	public void serialize(XmlSerializer serializer) throws IOException {
-		serializer.setPrefix("", getNamespace());
-		serializer.startTag(getNamespace(), getElementName());
-		SerializerUtils.setTextAttribute(serializer, "type", getType());
+    /**
+     * Returns true if this DataForm has at least one FORM_TYPE field which is
+     * hidden. This method is used for sanity checks.
+     *
+     * @return
+     */
+    public boolean hasHiddenFormTypeField() {
+        boolean found = false;
+        for (FormField f : fields) {
+            if (f.getVariable().equals("FORM_TYPE") && f.getType() != null && f.getType().equals("hidden"))
+                found = true;
+        }
+        return found;
+    }
+
+    public String toXML() {
+        StringBuilder buf = new StringBuilder();
+        buf.append("<").append(getElementName()).append(" xmlns=\"").append(getNamespace()).append(
+            "\" type=\"" + getType() +"\">");
         if (getTitle() != null) {
-        	SerializerUtils.addTextTag(serializer, "title", getTitle());
+            buf.append("<title>").append(getTitle()).append("</title>");
         }
         for (Iterator<String> it=getInstructions(); it.hasNext();) {
-        	SerializerUtils.addTextTag(serializer, "instructions", it.next());
+            buf.append("<instructions>").append(it.next()).append("</instructions>");
         }
         // Append the list of fields returned from a search
         if (getReportedData() != null) {
-            getReportedData().serialize(serializer);
+            buf.append(getReportedData().toXML());
         }
         // Loop through all the items returned from a search and append them to the string buffer
         for (Iterator<Item> i = getItems(); i.hasNext();) {
-        	i.next().serialize(serializer);
+            Item item = i.next();
+            buf.append(item.toXML());
         }
         // Loop through all the form fields and append them to the string buffer
         for (Iterator<FormField> i = getFields(); i.hasNext();) {
-        	i.next().serialize(serializer);
+            FormField field = i.next();
+            buf.append(field.toXML());
         }
-		serializer.endTag(getNamespace(), getElementName());
-	}
-
-    public String toXML() {
-    	return SerializerUtils.toXml(this);
+        buf.append("</").append(getElementName()).append(">");
+        return buf.toString();
     }
 
     /**
@@ -240,7 +246,7 @@ public class DataForm implements PacketExtension, Instance {
      *
      * @author Gaston Dombiak
      */
-    public static class ReportedData implements Instance {
+    public static class ReportedData {
         private List<FormField> fields = new ArrayList<FormField>();
         
         public ReportedData(List<FormField> fields) {
@@ -256,25 +262,17 @@ public class DataForm implements PacketExtension, Instance {
             return Collections.unmodifiableList(new ArrayList<FormField>(fields)).iterator();
         }
         
-    	@Override
-    	public void serialize(XmlSerializer serializer) throws IOException {
-    		serializer.startTag(null, "reported");
+        public String toXML() {
+            StringBuilder buf = new StringBuilder();
+            buf.append("<reported>");
             // Loop through all the form items and append them to the string buffer
             for (Iterator<FormField> i = getFields(); i.hasNext();) {
-                i.next().serialize(serializer);
+                FormField field = i.next();
+                buf.append(field.toXML());
             }
-            serializer.endTag(null, "reported");
-    	}
-
-        public String toXML() {
-        	return SerializerUtils.toXml(this);
+            buf.append("</reported>");
+            return buf.toString();
         }
-
-		@Override
-		public boolean isValid() {
-			return true;
-		}
-
     }
     
     /**
@@ -283,7 +281,7 @@ public class DataForm implements PacketExtension, Instance {
      *
      * @author Gaston Dombiak
      */
-    public static class Item implements Instance {
+    public static class Item {
         private List<FormField> fields = new ArrayList<FormField>();
         
         public Item(List<FormField> fields) {
@@ -299,29 +297,16 @@ public class DataForm implements PacketExtension, Instance {
             return Collections.unmodifiableList(new ArrayList<FormField>(fields)).iterator();
         }
         
-    	@Override
-    	public void serialize(XmlSerializer serializer) throws IOException {
-    		serializer.startTag(null, "item");
+        public String toXML() {
+            StringBuilder buf = new StringBuilder();
+            buf.append("<item>");
             // Loop through all the form items and append them to the string buffer
             for (Iterator<FormField> i = getFields(); i.hasNext();) {
-                i.next().serialize(serializer);
+                FormField field = i.next();
+                buf.append(field.toXML());
             }
-            serializer.endTag(null, "item");
-    	}
-
-        public String toXML() {
-        	return SerializerUtils.toXml(this);
+            buf.append("</item>");
+            return buf.toString();
         }
-
-		@Override
-		public boolean isValid() {
-			return true;
-		}
     }
-
-	@Override
-	public boolean isValid() {
-		return true;
-	}
-
 }

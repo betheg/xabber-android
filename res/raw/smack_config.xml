@@ -12,17 +12,18 @@
         <className>org.jivesoftware.smackx.bytestreams.socks5.Socks5BytestreamManager</className>    
         <className>org.jivesoftware.smackx.filetransfer.FileTransferManager</className>
         -->
+          
+        <className>org.jivesoftware.smackx.ping.PingManager</className>
+        
+        <className>org.jivesoftware.smackx.entitycaps.EntityCapsManager</className>
     </startupClasses>
 
     <!-- Packet reply timeout in milliseconds -->
     <packetReplyTimeout>5000</packetReplyTimeout>
 
-    <!-- Keep-alive interval in milliseconds -->
-    <keepAliveInterval>30000</keepAliveInterval>
-
-    <!-- Keep-alive response interval in milliseconds -->
-    <keepAliveResponse>30000</keepAliveResponse>
-
+    <!-- Ping interval in seconds -->
+    <defaultPingInterval>60</defaultPingInterval>
+    
     <!-- Enable/Disable local Socks5 proxy -->
     <localSocks5ProxyEnabled>true</localSocks5ProxyEnabled>
 

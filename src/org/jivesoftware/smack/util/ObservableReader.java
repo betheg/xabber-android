@@ -32,7 +32,7 @@ import java.util.*;
 public class ObservableReader extends Reader {
 
     Reader wrappedReader = null;
-    List listeners = new ArrayList();
+    List<ReaderListener> listeners = new ArrayList<ReaderListener>();
 
     public ObservableReader(Reader wrappedReader) {
         this.wrappedReader = wrappedReader;
@@ -57,14 +57,6 @@ public class ObservableReader extends Reader {
 
     public void close() throws IOException {
         wrappedReader.close();
-		ReaderListener[] readerListeners = null;
-		synchronized (listeners) {
-			readerListeners = new ReaderListener[listeners.size()];
-			listeners.toArray(readerListeners);
-		}
-		for (int i = 0; i < readerListeners.length; i++) {
-			readerListeners[i].close();
-		}
     }
 
     public int read() throws IOException {

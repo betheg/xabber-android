@@ -139,7 +139,20 @@ public class Roster {
 
         };
         
-        connection.forceAddConnectionListener(connectionListener);
+        // if not connected add listener after successful login
+        if(!this.connection.isConnected()) {
+            Connection.addConnectionCreationListener(new ConnectionCreationListener() {
+                
+                public void connectionCreated(Connection connection) {
+                    if(connection.equals(Roster.this.connection)) {
+                        Roster.this.connection.addConnectionListener(connectionListener);
+                    }
+                    
+                }
+            });
+        } else {
+            connection.addConnectionListener(connectionListener);
+        }
     }
 
     /**
@@ -243,23 +256,6 @@ public class Roster {
         RosterGroup group = new RosterGroup(name, connection);
         groups.put(name, group);
         return group;
-    }
-
-    /**
-     * Remove empty group.
-     * 
-     * @param name the name of the group.
-     * @throws IllegalStateException if group doesn't exists or is not empty.
-     */
-    public void removeEmptyGroup(String name) {
-        RosterGroup group = groups.get(name);
-        if (group == null) {
-            throw new IllegalArgumentException("Group with name " + name + " doesn't exists.");
-        }
-        if (group.getEntryCount() != 0) {
-            throw new IllegalArgumentException("Group " + name + " is not empty.");
-        }
-        groups.remove(name);
     }
 
     /**
@@ -727,13 +723,6 @@ public class Roster {
     }
 
     /**
-     * Cleans up all resources used by the roster.
-     */
-    void cleanup() {
-        rosterListeners.clear();
-    }
-
-    /**
      * Returns the key to use in the presenceMap for a fully qualified XMPP ID.
      * The roster can contain any valid address format such us "domain/resource",
      * "user@domain" or "user@domain/resource". If the roster contains an entry
@@ -959,29 +948,25 @@ public class Roster {
      *
      */
     
-    private class RosterResultListener implements PacketListener{
+    private class RosterResultListener implements PacketListener {
 
-		public void processPacket(Packet packet) {
-			if(packet instanceof IQ){
-				IQ result = (IQ)packet;
-				if(result.getType().equals(IQ.Type.RESULT) && result.getExtensions().isEmpty()){
-					Collection<String> addedEntries = new ArrayList<String>();
-		            Collection<String> updatedEntries = new ArrayList<String>();
-		            Collection<String> deletedEntries = new ArrayList<String>();
-		            if(persistentStorage!=null){
-		            	for(RosterPacket.Item item : persistentStorage.getEntries()){
-		            		insertRosterItem(item,addedEntries,updatedEntries,deletedEntries);
-		            	}
-                            }
-		            synchronized (Roster.this) {
-		                rosterInitialized = true;
-		                Roster.this.notifyAll();
-		            }
-		            fireRosterChangedEvent(addedEntries,updatedEntries,deletedEntries);
-			    }
-			}
-			connection.removePacketListener(this);
-		}
+        public void processPacket(Packet packet) {
+            if (packet instanceof IQ) {
+                IQ result = (IQ) packet;
+                if (result.getType().equals(IQ.Type.RESULT) && result.getExtensions().isEmpty()) {
+                    Collection<String> addedEntries = new ArrayList<String>();
+                    Collection<String> updatedEntries = new ArrayList<String>();
+                    Collection<String> deletedEntries = new ArrayList<String>();
+                    if (persistentStorage != null) {
+                        for (RosterPacket.Item item : persistentStorage.getEntries()) {
+                            insertRosterItem(item, addedEntries, updatedEntries, deletedEntries);
+                        }
+                    }
+                    fireRosterChangedEvent(addedEntries, updatedEntries, deletedEntries);
+                }
+            }
+            connection.removePacketListener(this);
+        }
     }
 
     /**

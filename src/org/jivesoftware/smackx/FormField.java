@@ -20,12 +20,8 @@
 
 package org.jivesoftware.smackx;
 
-import org.xmlpull.v1.XmlSerializer;
+import org.jivesoftware.smack.util.StringUtils;
 
-import com.xabber.xmpp.Instance;
-import com.xabber.xmpp.SerializerUtils;
-
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Iterator;
@@ -38,7 +34,7 @@ import java.util.List;
  *
  * @author Gaston Dombiak
  */
-public class FormField implements Instance {
+public class FormField {
 
     public static final String TYPE_BOOLEAN = "boolean";
     public static final String TYPE_FIXED = "fixed";
@@ -270,39 +266,56 @@ public class FormField implements Instance {
         }
     }
 
-	@Override
-	public void serialize(XmlSerializer serializer) throws IOException {
-		serializer.startTag(null, "field");
+    public String toXML() {
+        StringBuilder buf = new StringBuilder();
+        buf.append("<field");
         // Add attributes
         if (getLabel() != null) {
-        	SerializerUtils.setTextAttribute(serializer, "label", getLabel());
+            buf.append(" label=\"").append(getLabel()).append("\"");
         }
         if (getVariable() != null) {
-        	SerializerUtils.setTextAttribute(serializer, "var", getVariable());
+            buf.append(" var=\"").append(getVariable()).append("\"");
         }
         if (getType() != null) {
-        	SerializerUtils.setTextAttribute(serializer, "type", getType());
+            buf.append(" type=\"").append(getType()).append("\"");
         }
+        buf.append(">");
         // Add elements
         if (getDescription() != null) {
-        	SerializerUtils.addTextTag(serializer, "desc", getDescription());
+            buf.append("<desc>").append(getDescription()).append("</desc>");
         }
         if (isRequired()) {
-        	SerializerUtils.addEmtpyTag(serializer, "required");
+            buf.append("<required/>");
         }
         // Loop through all the values and append them to the string buffer
         for (Iterator<String> i = getValues(); i.hasNext();) {
-        	SerializerUtils.addTextTag(serializer, "value", i.next());
+            buf.append("<value>").append(i.next()).append("</value>");
         }
         // Loop through all the values and append them to the string buffer
         for (Iterator<Option> i = getOptions(); i.hasNext();) {
-        	i.next().serialize(serializer);
+            buf.append((i.next()).toXML());
         }
-        serializer.endTag(null, "field");
-	}
+        buf.append("</field>");
+        return buf.toString();
+    }
 
-    public String toXML() {
-    	return SerializerUtils.toXml(this);
+    @Override
+    public boolean equals(Object obj) {
+        if (obj == null)
+            return false;
+        if (obj == this)
+            return true;
+        if (!(obj instanceof FormField))
+            return false;
+
+        FormField other = (FormField) obj;
+
+        return toXML().equals(other.toXML());
+    }
+
+    @Override
+    public int hashCode() {
+        return toXML().hashCode();
     }
 
     /**
@@ -310,7 +323,7 @@ public class FormField implements Instance {
      *
      * @author Gaston Dombiak
      */
-    public static class Option implements Instance {
+    public static class Option {
 
         private String label;
         private String value;
@@ -342,36 +355,55 @@ public class FormField implements Instance {
             return value;
         }
 
+        @Override
         public String toString() {
             return getLabel();
         }
 
-    	@Override
-    	public void serialize(XmlSerializer serializer) throws IOException {
-    		serializer.startTag(null, "option");
+        public String toXML() {
+            StringBuilder buf = new StringBuilder();
+            buf.append("<option");
             // Add attribute
             if (getLabel() != null) {
-            	SerializerUtils.setTextAttribute(serializer, "label", getLabel());
+                buf.append(" label=\"").append(getLabel()).append("\"");
             }
+            buf.append(">");
             // Add element
-            SerializerUtils.addTextTag(serializer, "value", getValue());
-            serializer.endTag(null, "option");
-    	}
+            buf.append("<value>").append(StringUtils.escapeForXML(getValue())).append("</value>");
 
-        public String toXML() {
-        	return SerializerUtils.toXml(this);
+            buf.append("</option>");
+            return buf.toString();
         }
 
-		@Override
-		public boolean isValid() {
-			return true;
-		}
+        @Override
+        public boolean equals(Object obj) {
+            if (obj == null)
+                return false;
+            if (obj == this)
+                return true;
+            if (obj.getClass() != getClass())
+                return false;
 
+            Option other = (Option) obj;
+
+            if (!value.equals(other.value))
+                return false;
+
+            String thisLabel = label == null ? "" : label;
+            String otherLabel = other.label == null ? "" : other.label;
+
+            if (!thisLabel.equals(otherLabel))
+                return false;
+
+            return true;
+        }
+
+        @Override
+        public int hashCode() {
+            int result = 1;
+            result = 37 * result + value.hashCode();
+            result = 37 * result + (label == null ? 0 : label.hashCode());
+            return result;
+        }
     }
-
-	@Override
-	public boolean isValid() {
-		return true;
-	}
-
 }

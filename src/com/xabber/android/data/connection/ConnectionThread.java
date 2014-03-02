@@ -320,7 +320,7 @@ public class ConnectionThread implements
 
 		xmppConnection = new XMPPConnection(connectionConfiguration);
 		xmppConnection.addPacketListener(this, ACCEPT_ALL);
-		xmppConnection.forceAddConnectionListener(this);
+		xmppConnection.addConnectionListener(this);
 		connectionItem.onSRVResolved(this);
 		final String password = OAuthManager.getInstance().getPassword(
 				protocol, token);
@@ -470,9 +470,9 @@ public class ConnectionThread implements
 			return false;
 		StreamError streamError = ((XMPPException) e).getStreamError();
 		if (streamError == null
-				|| streamError.getType() != StreamError.Type.seeOtherHost)
+				|| !(streamError.getCode().equals("see-other-host"))) // != StreamError.Type.seeOtherHost)
 			return false;
-		String target = streamError.getBody();
+		String target = streamError.getText(); //getBody();
 		if (target == null || "".equals(target))
 			return false;
 		LogManager.i(this, "See other host: " + target);

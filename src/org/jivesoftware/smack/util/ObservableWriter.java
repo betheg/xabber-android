@@ -32,7 +32,7 @@ import java.util.*;
 public class ObservableWriter extends Writer {
 
     Writer wrappedWriter = null;
-    List listeners = new ArrayList();
+    List<WriterListener> listeners = new ArrayList<WriterListener>();
 
     public ObservableWriter(Writer wrappedWriter) {
         this.wrappedWriter = wrappedWriter;
@@ -50,14 +50,6 @@ public class ObservableWriter extends Writer {
 
     public void close() throws IOException {
         wrappedWriter.close();
-		WriterListener[] writerListeners = null;
-		synchronized (listeners) {
-			writerListeners = new WriterListener[listeners.size()];
-			listeners.toArray(writerListeners);
-		}
-		for (int i = 0; i < writerListeners.length; i++) {
-			writerListeners[i].close();
-		}
     }
 
     public void write(int c) throws IOException {

@@ -13,13 +13,12 @@
  */
 package org.jivesoftware.smackx.bytestreams.ibb;
 
-import java.lang.ref.WeakReference;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
-import java.util.WeakHashMap;
 import java.util.concurrent.ConcurrentHashMap;
 
 import org.jivesoftware.smack.AbstractConnectionListener;
@@ -28,11 +27,11 @@ import org.jivesoftware.smack.ConnectionCreationListener;
 import org.jivesoftware.smack.XMPPException;
 import org.jivesoftware.smack.packet.IQ;
 import org.jivesoftware.smack.packet.XMPPError;
+import org.jivesoftware.smack.util.SyncPacketSend;
 import org.jivesoftware.smackx.bytestreams.BytestreamListener;
 import org.jivesoftware.smackx.bytestreams.BytestreamManager;
 import org.jivesoftware.smackx.bytestreams.ibb.packet.Open;
 import org.jivesoftware.smackx.filetransfer.FileTransferManager;
-import org.jivesoftware.smackx.packet.SyncPacketSend;
 
 /**
  * The InBandBytestreamManager class handles establishing In-Band Bytestreams as specified in the <a
@@ -97,28 +96,27 @@ public class InBandBytestreamManager implements BytestreamManager {
     static {
         Connection.addConnectionCreationListener(new ConnectionCreationListener() {
             public void connectionCreated(final Connection connection) {
-                final InBandBytestreamManager manager;
-                manager = InBandBytestreamManager.getByteStreamManager(connection);
+                // create the manager for this connection
+                InBandBytestreamManager.getByteStreamManager(connection);
 
                 // register shutdown listener
                 connection.addConnectionListener(new AbstractConnectionListener() {
 
+                    @Override
                     public void connectionClosed() {
-                        manager.disableService();
+                        InBandBytestreamManager.getByteStreamManager(connection).disableService();
                     }
 
+                    @Override
                     public void connectionClosedOnError(Exception e) {
-                    	manager.disableService();
+                        InBandBytestreamManager.getByteStreamManager(connection).disableService();
                     }
 
+                    @Override
                     public void reconnectionSuccessful() {
-                    	// Register this instance since the connection has been
-                    	// reestablished
-                        synchronized (InBandBytestreamManager.class) {
-                            managers.put(connection, new WeakReference<InBandBytestreamManager>(manager));
-                        }
+                        // re-create the manager for this connection
+                        InBandBytestreamManager.getByteStreamManager(connection);
                     }
-
                 });
 
             }
@@ -142,8 +140,7 @@ public class InBandBytestreamManager implements BytestreamManager {
     private final static Random randomGenerator = new Random();
 
     /* stores one InBandBytestreamManager for each XMPP connection */
-    private final static Map<Connection, WeakReference<InBandBytestreamManager>> managers =
-        new WeakHashMap<Connection, WeakReference<InBandBytestreamManager>>();
+    private final static Map<Connection, InBandBytestreamManager> managers = new HashMap<Connection, InBandBytestreamManager>();
 
     /* XMPP connection */
     private final Connection connection;
@@ -197,15 +194,10 @@ public class InBandBytestreamManager implements BytestreamManager {
     public static synchronized InBandBytestreamManager getByteStreamManager(Connection connection) {
         if (connection == null)
             return null;
-        WeakReference<InBandBytestreamManager> reference = managers.get(connection);
-        InBandBytestreamManager manager;
-        if (reference == null)
-            manager = null;
-        else
-            manager = reference.get();
+        InBandBytestreamManager manager = managers.get(connection);
         if (manager == null) {
             manager = new InBandBytestreamManager(connection);
-            managers.put(connection, new WeakReference<InBandBytestreamManager>(manager));
+            managers.put(connection, manager);
         }
         return manager;
     }
@@ -539,14 +531,12 @@ public class InBandBytestreamManager implements BytestreamManager {
 
     /**
      * Disables the InBandBytestreamManager by removing its packet listeners and resetting its
-     * internal status.
+     * internal status, which includes removing this instance from the managers map.
      */
     private void disableService() {
 
         // remove manager from static managers map
-        synchronized (InBandBytestreamManager.class) {
-            managers.remove(connection);
-        }
+        managers.remove(connection);
 
         // remove all listeners registered by this manager
         this.connection.removePacketListener(this.initiationListener);

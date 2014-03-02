@@ -27,6 +27,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Iterator;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.WeakHashMap;
@@ -52,6 +53,7 @@ import org.jivesoftware.smack.filter.PacketTypeFilter;
 import org.jivesoftware.smack.packet.IQ;
 import org.jivesoftware.smack.packet.Message;
 import org.jivesoftware.smack.packet.Packet;
+import org.jivesoftware.smack.packet.PacketExtension;
 import org.jivesoftware.smack.packet.Presence;
 import org.jivesoftware.smack.packet.Registration;
 import org.jivesoftware.smackx.Form;
@@ -112,12 +114,16 @@ public class MultiUserChat {
                 // Chat protocol. This information will be used when another client tries to
                 // discover whether this client supports MUC or not.
                 ServiceDiscoveryManager.getInstanceFor(connection).addFeature(discoNamespace);
+
                 // Set the NodeInformationProvider that will provide information about the
                 // joined rooms whenever a disco request is received
+                final WeakReference<Connection> weakRefConnection = new WeakReference<Connection>(connection);
                 ServiceDiscoveryManager.getInstanceFor(connection).setNodeInformationProvider(
                     discoNode,
                     new NodeInformationProvider() {
                         public List<DiscoverItems.Item> getNodeItems() {
+                            Connection connection = weakRefConnection.get();
+                            if (connection == null) return new LinkedList<DiscoverItems.Item>();
                             List<DiscoverItems.Item> answer = new ArrayList<DiscoverItems.Item>();
                             Iterator<String> rooms=MultiUserChat.getJoinedRooms(connection);
                             while (rooms.hasNext()) {
@@ -131,6 +137,11 @@ public class MultiUserChat {
                         }
 
                         public List<DiscoverInfo.Identity> getNodeIdentities() {
+                            return null;
+                        }
+
+                        @Override
+                        public List<PacketExtension> getNodePacketExtensions() {
                             return null;
                         }
                     });
@@ -1157,7 +1168,7 @@ public class MultiUserChat {
      * XMPP user ID of the user who initiated the ban.
      *
      * @param jid the bare XMPP user ID of the user to ban (e.g. "user@host.org").
-     * @param reason the reason why the user was banned.
+     * @param reason the optional reason why the user was banned.
      * @throws XMPPException if an error occurs banning a user. In particular, a
      *      405 error can occur if a moderator or a user with an affiliation of "owner" or "admin"
      *      was tried to be banned (i.e. Not Allowed error).
@@ -1276,7 +1287,7 @@ public class MultiUserChat {
      * @throws XMPPException if an error occurs granting ownership privileges to a user.
      */
     public void grantOwnership(Collection<String> jids) throws XMPPException {
-        changeAffiliationByOwner(jids, "owner");
+        changeAffiliationByAdmin(jids, "owner");
     }
 
     /**
@@ -1289,7 +1300,7 @@ public class MultiUserChat {
      * @throws XMPPException if an error occurs granting ownership privileges to a user.
      */
     public void grantOwnership(String jid) throws XMPPException {
-        changeAffiliationByOwner(jid, "owner");
+        changeAffiliationByAdmin(jid, "owner", null);
     }
 
     /**
@@ -1301,7 +1312,7 @@ public class MultiUserChat {
      * @throws XMPPException if an error occurs revoking ownership privileges from a user.
      */
     public void revokeOwnership(Collection<String> jids) throws XMPPException {
-        changeAffiliationByOwner(jids, "admin");
+        changeAffiliationByAdmin(jids, "admin");
     }
 
     /**
@@ -1313,7 +1324,7 @@ public class MultiUserChat {
      * @throws XMPPException if an error occurs revoking ownership privileges from a user.
      */
     public void revokeOwnership(String jid) throws XMPPException {
-        changeAffiliationByOwner(jid, "admin");
+        changeAffiliationByAdmin(jid, "admin", null);
     }
 
     /**
@@ -1423,6 +1434,14 @@ public class MultiUserChat {
         }
     }
 
+    /**
+     * Tries to change the affiliation with an 'muc#admin' namespace
+     *
+     * @param jid
+     * @param affiliation
+     * @param reason the reason for the affiliation change (optional)
+     * @throws XMPPException
+     */
     private void changeAffiliationByAdmin(String jid, String affiliation, String reason)
             throws XMPPException {
         MUCAdmin iq = new MUCAdmin();
@@ -1431,7 +1450,8 @@ public class MultiUserChat {
         // Set the new affiliation.
         MUCAdmin.Item item = new MUCAdmin.Item(affiliation, null);
         item.setJid(jid);
-        item.setReason(reason);
+        if(reason != null)
+            item.setReason(reason);
         iq.addItem(item);
 
         // Wait for a response packet back from the server.
@@ -1632,7 +1652,7 @@ public class MultiUserChat {
      *         don't have enough privileges to get this information.
      */
     public Collection<Affiliate> getOwners() throws XMPPException {
-        return getAffiliatesByOwner("owner");
+        return getAffiliatesByAdmin("owner");
     }
 
     /**
@@ -1703,8 +1723,8 @@ public class MultiUserChat {
         }
         // Get the list of affiliates from the server's answer
         List<Affiliate> affiliates = new ArrayList<Affiliate>();
-        for (Iterator it = answer.getItems(); it.hasNext();) {
-            affiliates.add(new Affiliate((MUCOwner.Item) it.next()));
+        for (Iterator<MUCOwner.Item> it = answer.getItems(); it.hasNext();) {
+            affiliates.add(new Affiliate(it.next()));
         }
         return affiliates;
     }
@@ -1744,8 +1764,8 @@ public class MultiUserChat {
         }
         // Get the list of affiliates from the server's answer
         List<Affiliate> affiliates = new ArrayList<Affiliate>();
-        for (Iterator it = answer.getItems(); it.hasNext();) {
-            affiliates.add(new Affiliate((MUCAdmin.Item) it.next()));
+        for (Iterator<MUCAdmin.Item> it = answer.getItems(); it.hasNext();) {
+            affiliates.add(new Affiliate(it.next()));
         }
         return affiliates;
     }
@@ -1806,8 +1826,8 @@ public class MultiUserChat {
         }
         // Get the list of participants from the server's answer
         List<Occupant> participants = new ArrayList<Occupant>();
-        for (Iterator it = answer.getItems(); it.hasNext();) {
-            participants.add(new Occupant((MUCAdmin.Item) it.next()));
+        for (Iterator<MUCAdmin.Item> it = answer.getItems(); it.hasNext();) {
+            participants.add(new Occupant(it.next()));
         }
         return participants;
     }
@@ -1986,6 +2006,7 @@ public class MultiUserChat {
             return;
         }
         rooms.remove(room);
+        cleanup();
     }
 
     /**
@@ -2035,7 +2056,7 @@ public class MultiUserChat {
             userStatusListeners.toArray(listeners);
         }
         // Get the classes of the method parameters
-        Class[] paramClasses = new Class[params.length];
+        Class<?>[] paramClasses = new Class[params.length];
         for (int i = 0; i < params.length; i++) {
             paramClasses[i] = params[i].getClass();
         }
@@ -2088,7 +2109,7 @@ public class MultiUserChat {
         }
         try {
             // Get the method to execute based on the requested methodName and parameter
-            Class[] classes = new Class[params.size()];
+            Class<?>[] classes = new Class[params.size()];
             for (int i=0;i<params.size(); i++) {
                 classes[i] = String.class;
             }
@@ -2530,7 +2551,7 @@ public class MultiUserChat {
         }
     }
 
-    protected void finalize() throws Throwable {
+    private void cleanup() {
         try {
             if (connection != null) {
                 roomListenerMultiplexor.removeRoom(room);
@@ -2539,10 +2560,13 @@ public class MultiUserChat {
                     connection.removePacketListener(connectionListener);
                 }
             }
-        }
-        catch (Exception e) {
+        } catch (Exception e) {
             // Do nothing
         }
+    }
+
+    protected void finalize() throws Throwable {
+        cleanup();
         super.finalize();
     }
 
@@ -2555,9 +2579,15 @@ public class MultiUserChat {
     private static class InvitationsMonitor implements ConnectionListener {
         // We use a WeakHashMap so that the GC can collect the monitor when the
         // connection is no longer referenced by any object.
+        // Note that when the InvitationsMonitor is used, i.e. when there are InvitationListeners, it will add a
+        // PacketListener to the Connection and therefore a strong reference from the Connection to the
+        // InvitationsMonior will exists, preventing it from beeing gc'ed. After the last InvitationListener is gone,
+        // the PacketListener will get removed (cancel()) allowing the garbage collection of the InvitationsMonitor
+        // instance.
         private final static Map<Connection, WeakReference<InvitationsMonitor>> monitors =
                 new WeakHashMap<Connection, WeakReference<InvitationsMonitor>>();
 
+        // We don't use a synchronized List here because it would break the semantic of (add|remove)InvitationListener
         private final List<InvitationListener> invitationsListeners =
                 new ArrayList<InvitationListener>();
         private Connection connection;
@@ -2572,11 +2602,13 @@ public class MultiUserChat {
          */
         public static InvitationsMonitor getInvitationsMonitor(Connection conn) {
             synchronized (monitors) {
-                if (!monitors.containsKey(conn)) {
+                if (!monitors.containsKey(conn) || monitors.get(conn).get() == null) {
                     // We need to use a WeakReference because the monitor references the
                     // connection and this could prevent the GC from collecting the monitor
                     // when no other object references the monitor
-                    monitors.put(conn, new WeakReference<InvitationsMonitor>(new InvitationsMonitor(conn)));
+                    InvitationsMonitor ivm = new InvitationsMonitor(conn);
+                    monitors.put(conn, new WeakReference<InvitationsMonitor>(ivm));
+                    return ivm;
                 }
                 // Return the InvitationsMonitor that monitors the connection
                 return monitors.get(conn).get();

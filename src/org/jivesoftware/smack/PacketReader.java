@@ -22,11 +22,13 @@ package org.jivesoftware.smack;
 
 import org.jivesoftware.smack.Connection.ListenerWrapper;
 import org.jivesoftware.smack.packet.*;
+import org.jivesoftware.smack.parsing.ParsingExceptionCallback;
+import org.jivesoftware.smack.parsing.UnparsablePacket;
 import org.jivesoftware.smack.sasl.SASLMechanism.Challenge;
 import org.jivesoftware.smack.sasl.SASLMechanism.Failure;
 import org.jivesoftware.smack.sasl.SASLMechanism.Success;
 import org.jivesoftware.smack.util.PacketParserUtils;
-import org.jivesoftware.smackx.ServiceDiscoveryManager;
+
 import org.xmlpull.v1.XmlPullParserFactory;
 import org.xmlpull.v1.XmlPullParser;
 import org.xmlpull.v1.XmlPullParserException;
@@ -48,7 +50,7 @@ class PacketReader {
 
     private XMPPConnection connection;
     private XmlPullParser parser;
-    private boolean done;
+    volatile boolean done;
 
     private String connectionID = null;
 
@@ -98,7 +100,7 @@ class PacketReader {
      */
     synchronized public void startup() throws XMPPException {
         readerThread.start();
-        // Wait for stream tag before returing. We'll wait a couple of seconds before
+        // Wait for stream tag before returning. We'll wait a couple of seconds before
         // giving up and throwing an error.
         try {
             // A waiting thread may be woken up before the wait time or a notify
@@ -130,7 +132,7 @@ class PacketReader {
                     listener.connectionClosed();
                 }
                 catch (Exception e) {
-                    // Cath and print any exception so we can recover
+                    // Catch and print any exception so we can recover
                     // from a faulty listener and finish the shutdown process
                     e.printStackTrace();
                 }
@@ -140,56 +142,6 @@ class PacketReader {
 
         // Shut down the listener executor.
         listenerExecutor.shutdown();
-    }
-
-    /**
-     * Cleans up all resources used by the packet reader.
-     */
-    void cleanup() {
-        connection.recvListeners.clear();
-        connection.collectors.clear();
-    }
-
-    /**
-     * Sends out a notification that there was an error with the connection
-     * and closes the connection.
-     *
-     * @param e the exception that causes the connection close event.
-     */
-    void notifyConnectionError(Exception e) {
-        done = true;
-        // Closes the connection temporary. A reconnection is possible
-        connection.shutdown(new Presence(Presence.Type.unavailable));
-        // Print the stack trace to help catch the problem
-        e.printStackTrace();
-        // Notify connection listeners of the error.
-        for (ConnectionListener listener : connection.getConnectionListeners()) {
-            try {
-                listener.connectionClosedOnError(e);
-            }
-            catch (Exception e2) {
-                // Catch and print any exception so we can recover
-                // from a faulty listener
-                e2.printStackTrace();
-            }
-        }
-    }
-
-    /**
-     * Sends a notification indicating that the connection was reconnected successfully.
-     */
-    protected void notifyReconnection() {
-        // Notify connection listeners of the reconnection.
-        for (ConnectionListener listener : connection.getConnectionListeners()) {
-            try {
-                listener.reconnectionSuccessful();
-            }
-            catch (Exception e) {
-                // Catch and print any exception so we can recover
-                // from a faulty listener
-                e.printStackTrace();
-            }
-        }
     }
 
     /**
@@ -218,14 +170,49 @@ class PacketReader {
             int eventType = parser.getEventType();
             do {
                 if (eventType == XmlPullParser.START_TAG) {
+                    int parserDepth = parser.getDepth();
+                    ParsingExceptionCallback callback = connection.getParsingExceptionCallback();
                     if (parser.getName().equals("message")) {
-                        processPacket(PacketParserUtils.parseMessage(parser));
+                        Packet packet;
+                        try {
+                            packet = PacketParserUtils.parseMessage(parser);
+                        } catch (Exception e) {
+                            String content = PacketParserUtils.parseContentDepth(parser, parserDepth);
+                            UnparsablePacket message = new UnparsablePacket(content, e);
+                            if (callback != null) {
+                                callback.handleUnparsablePacket(message);
+                            }
+                            continue;
+                        }
+                        processPacket(packet);
                     }
                     else if (parser.getName().equals("iq")) {
-                        processPacket(PacketParserUtils.parseIQ(parser, connection));
+                        IQ iq;
+                        try {
+                            iq = PacketParserUtils.parseIQ(parser, connection);
+                        } catch (Exception e) {
+                            String content = PacketParserUtils.parseContentDepth(parser, parserDepth);
+                            UnparsablePacket message = new UnparsablePacket(content, e);
+                            if (callback != null) {
+                                callback.handleUnparsablePacket(message);
+                            }
+                            continue;
+                        }
+                        processPacket(iq);
                     }
                     else if (parser.getName().equals("presence")) {
-                        processPacket(PacketParserUtils.parsePresence(parser));
+                        Presence presence;
+                        try {
+                            presence = PacketParserUtils.parsePresence(parser);
+                        } catch (Exception e) {
+                            String content = PacketParserUtils.parseContentDepth(parser, parserDepth);
+                            UnparsablePacket message = new UnparsablePacket(content, e);
+                            if (callback != null) {
+                                callback.handleUnparsablePacket(message);
+                            }
+                            continue;
+                        }
+                        processPacket(presence);
                     }
                     // We found an opening stream. Record information about it, then notify
                     // the connectionID lock so that the packet reader startup can finish.
@@ -282,7 +269,7 @@ class PacketReader {
                             // depending on the number of retries
                             final Failure failure = PacketParserUtils.parseSASLFailure(parser);
                             processPacket(failure);
-                            connection.getSASLAuthentication().authenticationFailed(failure.getCondition());
+                            connection.getSASLAuthentication().authenticationFailed();
                         }
                     }
                     else if (parser.getName().equals("challenge")) {
@@ -322,10 +309,12 @@ class PacketReader {
             } while (!done && eventType != XmlPullParser.END_DOCUMENT && thread == readerThread);
         }
         catch (Exception e) {
-            if (!done) {
+            // The exception can be ignored if the the connection is 'done'
+            // or if the it was caused because the socket got closed
+            if (!(done || connection.isSocketClosed())) {
                 // Close the connection and notify connection listeners of the
                 // error.
-                notifyConnectionError(e);
+                connection.notifyConnectionError(e);
             }
         }
     }
@@ -389,11 +378,18 @@ class PacketReader {
                 else if(parser.getName().equals("ver")){
                 	connection.getConfiguration().setRosterVersioningAvailable(true);
                 }
-                else if(parser.getName().equals("c")){
-                	String node = parser.getAttributeValue(null, "node");
-                	String ver = parser.getAttributeValue(null, "ver");
-                	String capsNode = node+"#"+ver;
-                	connection.getConfiguration().setCapsNode(capsNode);
+                // Set the entity caps node for the server if one is send
+                // See http://xmpp.org/extensions/xep-0115.html#stream
+                else if (parser.getName().equals("c")) {
+                    String node = parser.getAttributeValue(null, "node");
+                    String ver = parser.getAttributeValue(null, "ver");
+                    if (ver != null && node != null) {
+                        String capsNode = node + "#" + ver;
+                        // In order to avoid a dependency from smack to smackx
+                        // we have to set the services caps node in the connection
+                        // and not directly in the EntityCapsManager
+                        connection.setServiceCapsNode(capsNode);
+                    }
                 }
                 else if (parser.getName().equals("session")) {
                     // The server supports sessions
@@ -457,7 +453,8 @@ class PacketReader {
             for (ListenerWrapper listenerWrapper : connection.recvListeners.values()) {
                 try {
                     listenerWrapper.notifyListener(packet);
-                } catch (RuntimeException e) {
+                } catch (Exception e) {
+                    System.err.println("Exception in packet listener: " + e);
                     e.printStackTrace();
                 }
             }

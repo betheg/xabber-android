@@ -30,6 +30,7 @@ import org.jivesoftware.smack.packet.IQ;
 import org.jivesoftware.smack.packet.IQ.Type;
 import org.jivesoftware.smack.packet.Packet;
 import org.jivesoftware.smackx.ServiceDiscoveryManager;
+import org.jivesoftware.smackx.packet.DiscoverInfo.Identity;
 
 import com.xabber.android.data.Application;
 import com.xabber.android.data.LogManager;
@@ -57,7 +58,12 @@ public class ConnectionManager implements OnInitializedListener,
 	 * Timeout for receiving reply from server.
 	 */
 	public final static int PACKET_REPLY_TIMEOUT = 5000;
-
+    
+	/**
+     * ping interval (seconds)
+     */
+	private static final int PING_INTERVAL = 60;
+	
 	/**
 	 * Path to the trust store in this system.
 	 */
@@ -76,16 +82,17 @@ public class ConnectionManager implements OnInitializedListener,
 
 	private final static ConnectionManager instance;
 
+
 	static {
 		instance = new ConnectionManager();
 		Application.getInstance().addManager(instance);
 
 		SmackConfiguration.setPacketReplyTimeout(PACKET_REPLY_TIMEOUT);
-
-		ServiceDiscoveryManager.setIdentityType("handheld");
-		ServiceDiscoveryManager.setIdentityName(Application.getInstance()
-				.getString(R.string.client_name));
-
+		SmackConfiguration.setDefaultPingInterval(PING_INTERVAL);
+		
+		ServiceDiscoveryManager.setDefaultIdentity(new Identity("client", Application
+				    .getInstance().getString(R.string.client_name), "handheld"));
+		
 		SASLAuthentication.registerSASLMechanism("X-MESSENGER-OAUTH2",
 				XMessengerOAuth2.class);
 		SASLAuthentication.supportSASLMechanism("X-MESSENGER-OAUTH2");
@@ -284,7 +291,7 @@ public class ConnectionManager implements OnInitializedListener,
 				if (connectionThread.getConnectionItem().getState()
 						.isConnected()
 						// XMPPConnection can`t be null here
-						&& !connectionThread.getXMPPConnection().isAlive()) {
+						&& connectionThread.getXMPPConnection().isSocketClosed()) {
 					LogManager.i(connectionThread.getConnectionItem(),
 							"forceReconnect on checkAlive");
 					reconnect.add(connectionThread.getConnectionItem());

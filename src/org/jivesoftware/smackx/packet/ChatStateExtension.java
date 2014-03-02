@@ -45,10 +45,6 @@ public class ChatStateExtension implements PacketExtension {
         this.state = state;
     }
 
-	public ChatState getState() {
-		return state;
-	}
-
     public String getElementName() {
         return state.name();
     }
@@ -74,4 +70,9 @@ public class ChatStateExtension implements PacketExtension {
             return new ChatStateExtension(state);
         }
     }
+
+	public ChatState getState() {
+		// TODO Auto-generated method stub
+		return state;
+	}
 }

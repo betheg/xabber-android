@@ -23,8 +23,10 @@ package org.jivesoftware.smack;
 import java.io.Reader;
 import java.io.Writer;
 import java.lang.reflect.Constructor;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -33,6 +35,9 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CopyOnWriteArraySet;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import org.jivesoftware.smack.compression.JzlibInputOutputStream;
+import org.jivesoftware.smack.compression.XMPPInputOutputStream;
+import org.jivesoftware.smack.compression.Java7ZlibInputOutputStream;
 import org.jivesoftware.smack.debugger.SmackDebugger;
 import org.jivesoftware.smack.filter.PacketFilter;
 import org.jivesoftware.smack.packet.Packet;
@@ -90,6 +95,8 @@ public abstract class Connection {
     private final static Set<ConnectionCreationListener> connectionEstablishedListeners =
             new CopyOnWriteArraySet<ConnectionCreationListener>();
 
+    protected final static List<XMPPInputOutputStream> compressionHandlers = new ArrayList<XMPPInputOutputStream>(2);
+
     /**
      * Value that indicates whether debugging is enabled. When enabled, a debug
      * window will apear for each new connection that will contain the following
@@ -116,6 +123,10 @@ public abstract class Connection {
         }
         // Ensure the SmackConfiguration class is loaded by calling a method in it.
         SmackConfiguration.getVersion();
+        // Add the Java7 compression handler first, since it's preferred
+        compressionHandlers.add(new Java7ZlibInputOutputStream());
+        // If we don't have access to the Java7 API use the JZlib compression handler
+        compressionHandlers.add(new JzlibInputOutputStream());
     }
 
     /**
@@ -199,6 +210,13 @@ public abstract class Connection {
     protected final ConnectionConfiguration config;
 
     /**
+     * Holds the Caps Node information for the used XMPP service (i.e. the XMPP server)
+     */
+    private String serviceCapsNode;
+
+    protected XMPPInputOutputStream compressionHandler;
+
+    /**
      * Create a new Connection to a XMPP server.
      * 
      * @param configuration The configuration which is used to establish the connection.
@@ -235,10 +253,6 @@ public abstract class Connection {
      */
     public String getHost() {
         return config.getHost();
-    }
-    
-    public String getCapsNode(){
-    	return config.getCapsNode();
     }
 
     /**
@@ -526,31 +540,11 @@ public abstract class Connection {
 
     /**
      * Adds a connection listener to this connection that will be notified when
-     * the connection closes or fails. The connection needs to already be connected
-     * or otherwise an IllegalStateException will be thrown.
-     * 
-     * @param connectionListener a connection listener.
-     */
-    @Deprecated
-    public void addConnectionListener(ConnectionListener connectionListener) {
-        if (!isConnected()) {
-            throw new IllegalStateException("Not connected to server.");
-        }
-        if (connectionListener == null) {
-            return;
-        }
-        if (!connectionListeners.contains(connectionListener)) {
-            connectionListeners.add(connectionListener);
-        }
-    }
-
-    /**
-     * Adds a connection listener to this connection that will be notified when
      * the connection closes or fails.
      * 
      * @param connectionListener a connection listener.
      */
-    public void forceAddConnectionListener(ConnectionListener connectionListener) {
+    public void addConnectionListener(ConnectionListener connectionListener) {
         if (connectionListener == null) {
             return;
         }
@@ -820,7 +814,29 @@ public abstract class Connection {
         
     }
 
+    /**
+     * Set the servers Entity Caps node
+     * 
+     * Connection holds this information in order to avoid a dependency to
+     * smackx where EntityCapsManager lives from smack.
+     * 
+     * @param node
+     */
+    protected void setServiceCapsNode(String node) {
+        serviceCapsNode = node;
+    }
 
+    /**
+     * Retrieve the servers Entity Caps node
+     * 
+     * Connection holds this information in order to avoid a dependency to
+     * smackx where EntityCapsManager lives from smack.
+     * 
+     * @return
+     */
+    public String getServiceCapsNode() {
+        return serviceCapsNode;
+    }
 
     /**
      * A wrapper class to associate a packet filter with a listener.

@@ -22,11 +22,16 @@ package org.jivesoftware.smack;
 
 import org.jivesoftware.smack.proxy.ProxyInfo;
 import org.jivesoftware.smack.util.DNSUtil;
+import org.jivesoftware.smack.util.dns.HostAddress;
 
 import javax.net.SocketFactory;
 import javax.net.ssl.SSLContext;
 import org.apache.harmony.javax.security.auth.callback.CallbackHandler;
 import java.io.File;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+
 import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
 
@@ -50,6 +55,7 @@ public class ConnectionConfiguration implements Cloneable {
 
     private String host;
     private int port;
+    protected List<HostAddress> hostAddresses;
 
     private String truststorePath;
     private String truststoreType;
@@ -63,7 +69,6 @@ public class ConnectionConfiguration implements Cloneable {
     private boolean expiredCertificatesCheckEnabled = false;
     private boolean notMatchingDomainCheckEnabled = false;
     private boolean isRosterVersioningAvailable = false;
-    private String capsNode = null;
     private SSLContext customSSLContext;
 
     private boolean compressionEnabled = false;
@@ -93,7 +98,7 @@ public class ConnectionConfiguration implements Cloneable {
 	// Holds the proxy information (such as proxyhost, proxyport, username, password etc)
     protected ProxyInfo proxy;
 
-	private CertificateListener certificateListener;
+    private CertificateListener certificateListener;
 
     /**
      * Creates a new ConnectionConfiguration for the specified service name.
@@ -104,12 +109,18 @@ public class ConnectionConfiguration implements Cloneable {
      */
     public ConnectionConfiguration(String serviceName) {
         // Perform DNS lookup to get host and port to use
-        DNSUtil.HostAddress address = DNSUtil.resolveXMPPDomain(serviceName);
-        init(address.getHost(), address.getPort(), serviceName, 
-			ProxyInfo.forDefaultProxy());
+        hostAddresses = DNSUtil.resolveXMPPDomain(serviceName);
+        init(serviceName, ProxyInfo.forDefaultProxy());
     }
-	
-	/**
+
+    /**
+     * 
+     */
+    protected ConnectionConfiguration() {
+      /* Does nothing */	
+    }
+
+    /**
      * Creates a new ConnectionConfiguration for the specified service name 
      * with specified proxy.
      * A DNS SRV lookup will be performed to find out the actual host address
@@ -120,8 +131,8 @@ public class ConnectionConfiguration implements Cloneable {
      */
     public ConnectionConfiguration(String serviceName,ProxyInfo proxy) {
         // Perform DNS lookup to get host and port to use
-        DNSUtil.HostAddress address = DNSUtil.resolveXMPPDomain(serviceName);
-        init(address.getHost(), address.getPort(), serviceName, proxy);
+        hostAddresses = DNSUtil.resolveXMPPDomain(serviceName);
+        init(serviceName, proxy);
     }
 
     /**
@@ -139,7 +150,8 @@ public class ConnectionConfiguration implements Cloneable {
      * @param serviceName the name of the service provided by an XMPP server.
      */
     public ConnectionConfiguration(String host, int port, String serviceName) {
-        init(host, port, serviceName, ProxyInfo.forDefaultProxy());
+        initHostAddresses(host, port);
+        init(serviceName, ProxyInfo.forDefaultProxy());
     }
 	
 	/**
@@ -158,7 +170,8 @@ public class ConnectionConfiguration implements Cloneable {
      * @param proxy the proxy through which XMPP is to be connected
      */
     public ConnectionConfiguration(String host, int port, String serviceName, ProxyInfo proxy) {
-        init(host, port, serviceName, proxy);
+        initHostAddresses(host, port);
+        init(serviceName, proxy);
     }
 
     /**
@@ -169,7 +182,8 @@ public class ConnectionConfiguration implements Cloneable {
      * @param port the port where the XMPP is listening.
      */
     public ConnectionConfiguration(String host, int port) {
-        init(host, port, host, ProxyInfo.forDefaultProxy());
+        initHostAddresses(host, port);
+        init(host, ProxyInfo.forDefaultProxy());
     }
 	
 	/**
@@ -181,12 +195,11 @@ public class ConnectionConfiguration implements Cloneable {
      * @param proxy the proxy through which XMPP is to be connected
      */
     public ConnectionConfiguration(String host, int port, ProxyInfo proxy) {
-        init(host, port, host, proxy);
+        initHostAddresses(host, port);
+        init(host, proxy);
     }
 
-    private void init(String host, int port, String serviceName, ProxyInfo proxy) {
-        this.host = host;
-        this.port = port;
+    protected void init(String serviceName, ProxyInfo proxy) {
         this.serviceName = serviceName;
         this.proxy = proxy;
 
@@ -247,6 +260,11 @@ public class ConnectionConfiguration implements Cloneable {
      */
     public int getPort() {
         return port;
+    }
+
+    public void setUsedHostAddress(HostAddress hostAddress) {
+        this.host = hostAddress.getFQDN();
+        this.port = hostAddress.getPort();
     }
 
     /**
@@ -500,17 +518,17 @@ public class ConnectionConfiguration implements Cloneable {
      * @return the SSLContext previously set with setCustomSSLContext() or null.
      */
     public SSLContext getCustomSSLContext() {
-	    return this.customSSLContext;
+        return this.customSSLContext;
     }
 
     /**
      * Sets a custom SSLContext for creating SSL sockets. A custom Context causes all other
      * SSL/TLS realted settings to be ignored.
      *
-     * @param context the custom SSLContext for new sockets; null to reset default behaviour.
+     * @param context the custom SSLContext for new sockets; null to reset default behavior.
      */
     public void setCustomSSLContext(SSLContext context) {
-	    this.customSSLContext = context;
+        this.customSSLContext = context;
     }
 
     /**
@@ -680,8 +698,12 @@ public class ConnectionConfiguration implements Cloneable {
         return this.socketFactory;
     }
 
+    public List<HostAddress> getHostAddresses() {
+        return Collections.unmodifiableList(hostAddresses);
+    }
+
     /**
-     * An enumeration for TLS/SSL security modes that are available when making a connection
+     * An enumeration for TLS security modes that are available when making a connection
      * to the XMPP server.
      */
     public static enum SecurityMode {
@@ -704,13 +726,7 @@ public class ConnectionConfiguration implements Cloneable {
          * be used. If only TLS encryption is available from the server, the connection
          * will fail.
          */
-        disabled,
-
-        /**
-         * Security via old SSL based encryption is enabled. If the server
-         * does not handle legacy-SSL, the connection to the server will fail.
-         */
-        legacy
+        disabled
     }
 
     /**
@@ -747,14 +763,6 @@ public class ConnectionConfiguration implements Cloneable {
     void setRosterVersioningAvailable(boolean enabled){
     	isRosterVersioningAvailable = enabled;
     }
-    
-    void setCapsNode(String node){
-    	capsNode = node;
-    }
-    
-    String getCapsNode(){
-    	return capsNode;
-    }
 
     /**
      * Returns true if an available presence should be sent when logging in while reconnecting.
@@ -771,43 +779,54 @@ public class ConnectionConfiguration implements Cloneable {
         this.resource = resource;
     }
 
-	/**
-	 * @return Previously set {@link CertificateListener} or newly created based
-	 *       on configuration.
-	 */
+    private void initHostAddresses(String host, int port) {
+        hostAddresses = new ArrayList<HostAddress>(1);
+        HostAddress hostAddress;
+        try {
+             hostAddress = new HostAddress(host, port);
+        } catch (Exception e) {
+            throw new IllegalStateException(e);
+        }
+        hostAddresses.add(hostAddress);
+    }
+
+    /**
+     * @return Previously set {@link CertificateListener} or newly created based
+     *       on configuration.
+     */
     CertificateListener getCertificateListener() {
-		if (certificateListener != null)
-			return certificateListener;
-		return new CertificateListener() {
+        if (certificateListener != null)
+            return certificateListener;
+        return new CertificateListener() {
 
-			@Override
-			public boolean onValid(X509Certificate[] chain) {
-				return true;
-			}
+            @Override
+            public boolean onValid(X509Certificate[] chain) {
+                return true;
+            }
 
-			@Override
-			public boolean onInvalidChain(X509Certificate[] chain,
-					CertificateException exception) {
-				return false;
-			}
+            @Override
+            public boolean onInvalidChain(X509Certificate[] chain,
+                    CertificateException exception) {
+                return false;
+            }
 
-			@Override
-			public boolean onSelfSigned(X509Certificate certificate,
-					CertificateException exception) {
-				return false;
-			}
+            @Override
+            public boolean onSelfSigned(X509Certificate certificate,
+                    CertificateException exception) {
+                return false;
+            }
 
-			@Override
-			public boolean onInvalidTarget(X509Certificate certificate,
-					CertificateException exception) {
-				return false;
-			}
+            @Override
+            public boolean onInvalidTarget(X509Certificate certificate,
+                    CertificateException exception) {
+                return false;
+            }
 
-		};
-	}
+        };
+    }
 
-	public void setCertificateListener(CertificateListener certificateListener) {
-		this.certificateListener = certificateListener;
-	}
+    public void setCertificateListener(CertificateListener certificateListener) {
+        this.certificateListener = certificateListener;
+    }
 
 }

@@ -63,7 +63,7 @@ public class Feature extends PacketExtension {
 
 	@Override
 	public void serializeContent(XmlSerializer serializer) throws IOException {
-		dataForm.serialize(serializer);
+	//	dataForm.serialize(serializer);
 	}
 
 	@Override

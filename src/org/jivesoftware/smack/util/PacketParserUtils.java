@@ -20,15 +20,6 @@
 
 package org.jivesoftware.smack.util;
 
-import org.jivesoftware.smack.Connection;
-import org.jivesoftware.smack.packet.*;
-import org.jivesoftware.smack.provider.IQProvider;
-import org.jivesoftware.smack.provider.PacketExtensionProvider;
-import org.jivesoftware.smack.provider.ProviderManager;
-import org.jivesoftware.smack.sasl.SASLMechanism.Failure;
-import org.xmlpull.v1.XmlPullParser;
-import org.xmlpull.v1.XmlPullParserException;
-
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.ObjectInputStream;
@@ -37,7 +28,26 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.NoSuchElementException;
+
+import org.jivesoftware.smack.Connection;
+import org.jivesoftware.smack.packet.Authentication;
+import org.jivesoftware.smack.packet.Bind;
+import org.jivesoftware.smack.packet.DefaultPacketExtension;
+import org.jivesoftware.smack.packet.IQ;
+import org.jivesoftware.smack.packet.Message;
+import org.jivesoftware.smack.packet.Packet;
+import org.jivesoftware.smack.packet.PacketExtension;
+import org.jivesoftware.smack.packet.Presence;
+import org.jivesoftware.smack.packet.Registration;
+import org.jivesoftware.smack.packet.RosterPacket;
+import org.jivesoftware.smack.packet.StreamError;
+import org.jivesoftware.smack.packet.XMPPError;
+import org.jivesoftware.smack.provider.IQProvider;
+import org.jivesoftware.smack.provider.PacketExtensionProvider;
+import org.jivesoftware.smack.provider.ProviderManager;
+import org.jivesoftware.smack.sasl.SASLMechanism.Failure;
+import org.xmlpull.v1.XmlPullParser;
+import org.xmlpull.v1.XmlPullParserException;
 
 /**
  * Utility class that helps to parse packets. Any parsing packets method that must be shared
@@ -160,13 +170,16 @@ public class PacketParserUtils {
      */
     private static String parseContent(XmlPullParser parser)
                     throws XmlPullParserException, IOException {
-        String content = "";
         int parserDepth = parser.getDepth();
-        while (!(parser.next() == XmlPullParser.END_TAG && parser
-                        .getDepth() == parserDepth)) {
-            content += parser.getText();
+        return parseContentDepth(parser, parserDepth);
+    }
+
+    public static String parseContentDepth(XmlPullParser parser, int depth) throws XmlPullParserException, IOException {
+        StringBuffer content = new StringBuffer();
+        while (!(parser.next() == XmlPullParser.END_TAG && parser.getDepth() == depth)) {
+            content.append(parser.getText());
         }
-        return content;
+        return content.toString();
     }
 
     /**
@@ -245,8 +258,12 @@ public class PacketParserUtils {
                 }
                 // Otherwise, it must be a packet extension.
                 else {
-                    presence.addExtension(
-                        PacketParserUtils.parsePacketExtension(elementName, namespace, parser));
+                	try {
+                        presence.addExtension(PacketParserUtils.parsePacketExtension(elementName, namespace, parser));
+                	}
+                	catch (Exception e) {
+                		System.err.println("Failed to parse extension packet in Presence packet.");
+                	}
                 }
             }
             else if (eventType == XmlPullParser.END_TAG) {
@@ -307,8 +324,15 @@ public class PacketParserUtils {
                         }
                         else if (provider instanceof Class) {
                             iqPacket = (IQ)PacketParserUtils.parseWithIntrospection(elementName,
-                                    (Class)provider, parser);
+                                    (Class<?>)provider, parser);
                         }
+                    }
+                    // Only handle unknown IQs of type result. Types of 'get' and 'set' which are not understood
+                    // have to be answered with an IQ error response. See the code a few lines below
+                    else if (IQ.Type.RESULT == type){
+                        // No Provider found for the IQ stanza, parse it to an UnparsedIQ instance
+                        // so that the content of the IQ can be examined later on
+                        iqPacket = new UnparsedResultIQ(parseContent(parser));
                     }
                 }
             }
@@ -325,6 +349,7 @@ public class PacketParserUtils {
                 // qualified by a namespace it does not understand, then answer an IQ of
                 // type "error" with code 501 ("feature-not-implemented")
                 iqPacket = new IQ() {
+                    @Override
                     public String getChildElementXML() {
                         return null;
                     }
@@ -340,6 +365,7 @@ public class PacketParserUtils {
             else {
                 // If an IQ packet wasn't created above, create an empty IQ packet.
                 iqPacket = new IQ() {
+                    @Override
                     public String getChildElementXML() {
                         return null;
                     }
@@ -673,53 +699,34 @@ public class PacketParserUtils {
      */
     public static StreamError parseStreamError(XmlPullParser parser) throws IOException,
             XmlPullParserException {
-    StreamError streamError = new StreamError();
+    final int depth = parser.getDepth();
     boolean done = false;
+    String code = null;
+    String text = null;
     while (!done) {
         int eventType = parser.next();
 
         if (eventType == XmlPullParser.START_TAG) {
-            String name = parser.getName();
-            StreamError.Type type;
-            try {
-                type = StreamError.Type.fromString(name);
-            } catch (NoSuchElementException e) {
-                continue;
+            String namespace = parser.getNamespace();
+            if (StreamError.NAMESPACE.equals(namespace)) {
+                String name = parser.getName();
+                if (name.equals("text") && !parser.isEmptyElementTag()) {
+                    parser.next();
+                    text = parser.getText();
+                }
+                else {
+                    // If it's not a text element, that is qualified by the StreamError.NAMESPACE,
+                    // then it has to be the stream error code
+                    code = name;
+                }
             }
-            streamError.setType(type);
-            streamError.setBody(parseStreamErrorBody(parser));
         }
-        else if (eventType == XmlPullParser.END_TAG) {
-            if (parser.getName().equals("error")) {
-                done = true;
-            }
+        else if (eventType == XmlPullParser.END_TAG && depth == parser.getDepth()) {
+            done = true;
         }
     }
-    return streamError;
+    return new StreamError(code, text);
 }
-
-    /**
-     * Parses stream error body.
-     *
-     * @param parser the XML parser.
-     * @return inner string.
-     * @throws Exception if an exception occurs while parsing the packet.
-     */
-    public static String parseStreamErrorBody(XmlPullParser parser)
-            throws IOException, XmlPullParserException {
-	    int level = 0;
-	    StringBuilder builder = new StringBuilder();
-	    while (level >= 0) {
-	        int eventType = parser.next();
-	        if (eventType == XmlPullParser.START_TAG)
-	            level += 1;
-	        else if (eventType == XmlPullParser.END_TAG)
-	            level -= 1;
-	        else if (eventType == XmlPullParser.TEXT)
-	            builder.append(parser.getText());
-	    }
-        return builder.toString();
-    }
 
     /**
      * Parses error sub-packets.
@@ -805,7 +812,7 @@ public class PacketParserUtils {
             }
             else if (provider instanceof Class) {
                 return (PacketExtension)parseWithIntrospection(
-                        elementName, (Class)provider, parser);
+                        elementName, (Class<?>)provider, parser);
             }
         }
         // No providers registered, so use a default extension.
@@ -837,7 +844,7 @@ public class PacketParserUtils {
         return extension;
     }
 
-    public static String getLanguageAttribute(XmlPullParser parser) {
+    private static String getLanguageAttribute(XmlPullParser parser) {
     	for (int i = 0; i < parser.getAttributeCount(); i++) {
             String attributeName = parser.getAttributeName(i);
             if ( "xml:lang".equals(attributeName) ||
@@ -850,7 +857,7 @@ public class PacketParserUtils {
     }
 
     public static Object parseWithIntrospection(String elementName,
-            Class objectClass, XmlPullParser parser) throws Exception
+            Class<?> objectClass, XmlPullParser parser) throws Exception
     {
         boolean done = false;
         Object object = objectClass.newInstance();
@@ -875,7 +882,7 @@ public class PacketParserUtils {
             }
         }
         return object;
-    }
+            }
 
     /**
      * Decodes a String into an object of the specified type. If the object
@@ -886,7 +893,7 @@ public class PacketParserUtils {
      * @return the String value decoded into the specified type.
      * @throws Exception If decoding failed due to an error.
      */
-    private static Object decode(Class type, String value) throws Exception {
+    private static Object decode(Class<?> type, String value) throws Exception {
         if (type.getName().equals("java.lang.String")) {
             return value;
         }
@@ -909,5 +916,25 @@ public class PacketParserUtils {
             return Class.forName(value);
         }
         return null;
+    }
+
+    /**
+     * This class represents and unparsed IQ of the type 'result'. Usually it's created when no IQProvider
+     * was found for the IQ element.
+     * 
+     * The child elements can be examined with the getChildElementXML() method.
+     *
+     */
+    public static class UnparsedResultIQ extends IQ {
+        public UnparsedResultIQ(String content) {
+            this.str = content;
+        }
+
+        private final String str;
+
+        @Override
+        public String getChildElementXML() {
+            return this.str;
+        }
     }
 }

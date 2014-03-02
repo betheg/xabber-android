@@ -1,7 +1,7 @@
 /**
  * $RCSfile$
- * $Revision: $
- * $Date: $
+ * $Revision$
+ * $Date$
  *
  * Copyright 2003-2006 Jive Software.
  *
@@ -23,7 +23,6 @@ import java.text.ParseException;
 import java.util.Date;
 
 import org.jivesoftware.smack.packet.IQ;
-import org.jivesoftware.smack.packet.Packet;
 import org.jivesoftware.smack.provider.IQProvider;
 import org.jivesoftware.smack.util.StringUtils;
 import org.jivesoftware.smackx.packet.DataForm;

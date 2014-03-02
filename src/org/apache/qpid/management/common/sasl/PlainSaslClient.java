@@ -20,9 +20,16 @@
  */
 package org.apache.qpid.management.common.sasl;
 
-import java.io.*;
-import org.apache.harmony.javax.security.auth.callback.*;
-import org.apache.harmony.javax.security.sasl.*;
+import org.apache.harmony.javax.security.auth.callback.Callback;
+import org.apache.harmony.javax.security.auth.callback.CallbackHandler;
+import org.apache.harmony.javax.security.auth.callback.NameCallback;
+import org.apache.harmony.javax.security.auth.callback.PasswordCallback;
+import org.apache.harmony.javax.security.auth.callback.UnsupportedCallbackException;
+import de.measite.smack.Sasl;
+import org.apache.harmony.javax.security.sasl.SaslClient;
+import org.apache.harmony.javax.security.sasl.SaslException;
+import java.io.IOException;
+import java.io.UnsupportedEncodingException;
 
 public class PlainSaslClient implements SaslClient
 {

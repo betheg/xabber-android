@@ -37,10 +37,7 @@ public interface ReaderListener {
      * @param str the read String
      */
     public abstract void read(String str);
-    
-	/**
-	 * Notification that the Reader has been closed.
-	 */
-	public abstract void close();
 
+	public abstract void close();
+    
 }

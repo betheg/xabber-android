@@ -62,8 +62,6 @@ ResolverConfig() {
 		} else if (OS.indexOf("NetWare") != -1) {
 			findNetware();
 		} else if (vendor.indexOf("Android") != -1) {
-			if (findAndroidProp())
-				return;
 			findAndroid();
 		} else {
 			findUnix();
@@ -423,35 +421,6 @@ findNT() {
 }
 
 /**
- * Directly access to the system properties using native functions in order
- * to avoid application freeze on system call. Related bug in Bionic was
- * fixed but still wasn't released in Android 4.0.4:
- * https://github.com/android/platform_bionic/commit/177ba8cb42ed6d232e7c8bcad5e6ee21fc51a0e8#libc/bionic
- */
-private boolean findAndroidProp() {
-	try {
-		Class<?> SystemProperties = Class
-				.forName("android.os.SystemProperties");
-		Method method = SystemProperties.getMethod("get",
-				new Class[] { String.class });
-		ArrayList lserver = new ArrayList();
-		ArrayList lsearch = new ArrayList();
-		for (String name : new String[] { "net.dns", "net.dns1",
-				"net.dns2", "net.dns3", "net.dns4", }) {
-			String value = (String) method.invoke(null, name);
-			if (value == null || "".equals(value) || lserver.contains(value))
-				continue;
-			lserver.add(value);
-		}
-		configureFromLists(lserver, lsearch);
-	} catch (Exception e) {
-		e.printStackTrace();
-		return false;
-	}
-	return true;
-}
-
-/**
  * Parses the output of getprop, which is the only way to get DNS
  * info on Android. getprop might disappear in future releases, so
  * this code comes with a use-by date.
@@ -462,31 +431,30 @@ findAndroid() {
 	// http://code.google.com/p/android/issues/detail?id=2207#c73
 	// indicates that net.dns* should always be the active nameservers, so
 	// we use those.
-	String re1 = "^\\d+(\\.\\d+){3}$";
-	String re2 = "^[0-9a-f]+(:[0-9a-f]*)+:[0-9a-f]+$";
-	try { 
-		ArrayList lserver = new ArrayList(); 
-		ArrayList lsearch = new ArrayList(); 
-		String line; 
-		Process p = Runtime.getRuntime().exec("getprop"); 
-		InputStream in = p.getInputStream();
-		InputStreamReader isr = new InputStreamReader(in);
-		BufferedReader br = new BufferedReader(isr);
-		while ((line = br.readLine()) != null ) { 
-			StringTokenizer t = new StringTokenizer(line, ":");
-			String name = t.nextToken();
-			if (name.indexOf( "net.dns" ) > -1) {
-				String v = t.nextToken();
-				v = v.replaceAll("[ \\[\\]]", "");
-				if ((v.matches(re1) || v.matches(re2)) &&
-				    !lserver.contains(v))
-					lserver.add(v);
-			}
+	final String re1 = "^\\d+(\\.\\d+){3}$";
+	final String re2 = "^[0-9a-f]+(:[0-9a-f]*)+:[0-9a-f]+$";
+	ArrayList lserver = new ArrayList();
+	ArrayList lsearch = new ArrayList();
+	try {
+		Class SystemProperties =
+		    Class.forName("android.os.SystemProperties");
+		Method method =
+		    SystemProperties.getMethod("get",
+					       new Class[] { String.class });
+		final String [] netdns = new String [] {"net.dns1", "net.dns2",
+						        "net.dns3", "net.dns4"};
+		for (int i = 0; i < netdns.length; i++) {
+			Object [] args = new Object [] { netdns[i] };
+			String v = (String) method.invoke(null, args);
+			if (v != null &&
+			    (v.matches(re1) || v.matches(re2)) &&
+			    !lserver.contains(v))
+				lserver.add(v);
 		}
-		configureFromLists(lserver, lsearch);
-	} catch ( Exception e ) { 
+	} catch ( Exception e ) {
 		// ignore resolutely
 	}
+	configureFromLists(lserver, lsearch);
 }
 
 /** Returns all located servers */
