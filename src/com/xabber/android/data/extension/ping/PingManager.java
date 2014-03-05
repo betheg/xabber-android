@@ -12,6 +12,7 @@
  * You should have received a copy of the GNU General Public License,
  * along with this program. If not, see http://www.gnu.org/licenses/.
  */
+/*
 package com.xabber.android.data.extension.ping;
 
 import org.jivesoftware.smack.Connection;
@@ -28,13 +29,14 @@ import com.xabber.android.data.account.AccountItem;
 import com.xabber.android.data.connection.ConnectionItem;
 import com.xabber.android.data.connection.ConnectionManager;
 import com.xabber.android.data.connection.OnPacketListener;
-
+*/
 /**
  * Reply on incoming ping requests.
  * 
  * @author alexander.ivanov
  * 
  */
+/*
 public class PingManager implements OnPacketListener {
 
 	private final static PingManager instance;
@@ -80,3 +82,4 @@ public class PingManager implements OnPacketListener {
 	}
 
 }
+*/

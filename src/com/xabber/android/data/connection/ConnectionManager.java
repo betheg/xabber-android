@@ -31,6 +31,7 @@ import org.jivesoftware.smack.packet.IQ.Type;
 import org.jivesoftware.smack.packet.Packet;
 import org.jivesoftware.smackx.ServiceDiscoveryManager;
 import org.jivesoftware.smackx.packet.DiscoverInfo.Identity;
+import org.jivesoftware.smackx.ping.PingManager;
 
 import com.xabber.android.data.Application;
 import com.xabber.android.data.LogManager;
@@ -226,6 +227,8 @@ public class ConnectionManager implements OnInitializedListener,
 		for (OnConnectedListener listener : Application.getInstance()
 				.getManagers(OnConnectedListener.class))
 			listener.onConnected(connectionThread.getConnectionItem());
+		PingManager.getInstanceFor(connectionThread.getXMPPConnection())
+			.registerPingFailedListener(connectionThread.getConnectionItem());
 	}
 
 	public void onAuthorized(ConnectionThread connectionThread) {
@@ -290,8 +293,7 @@ public class ConnectionManager implements OnInitializedListener,
 			for (ConnectionThread connectionThread : managedConnections)
 				if (connectionThread.getConnectionItem().getState()
 						.isConnected()
-						// XMPPConnection can`t be null here
-						&& connectionThread.getXMPPConnection().isSocketClosed()) {
+						&& connectionThread.getConnectionItem().isPingFailed()) {
 					LogManager.i(connectionThread.getConnectionItem(),
 							"forceReconnect on checkAlive");
 					reconnect.add(connectionThread.getConnectionItem());
@@ -310,5 +312,4 @@ public class ConnectionManager implements OnInitializedListener,
 			}
 		}
 	}
-
 }

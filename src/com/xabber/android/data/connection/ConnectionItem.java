@@ -15,6 +15,7 @@
 package com.xabber.android.data.connection;
 
 import org.jivesoftware.smack.XMPPConnection;
+import org.jivesoftware.smackx.ping.PingFailedListener;
 
 import com.xabber.android.data.Application;
 import com.xabber.android.data.LogManager;
@@ -27,7 +28,7 @@ import com.xabber.androiddev.R;
  * @author alexander.ivanov
  * 
  */
-public abstract class ConnectionItem {
+public abstract class ConnectionItem implements PingFailedListener {
 
 	/**
 	 * Connection options.
@@ -54,6 +55,8 @@ public abstract class ConnectionItem {
 	 */
 	private boolean disconnectionRequested;
 
+	private boolean pingFailed;
+
 	public ConnectionItem(AccountProtocol protocol, boolean custom,
 			String host, int port, String serverName, String userName,
 			String resource, boolean storePassword, String password,
@@ -68,6 +71,7 @@ public abstract class ConnectionItem {
 		disconnectionRequested = false;
 		connectionThread = null;
 		state = ConnectionState.offline;
+		pingFailed = false;
 	}
 
 	/**
@@ -88,6 +92,10 @@ public abstract class ConnectionItem {
 
 	public ConnectionState getState() {
 		return state;
+	}
+
+	public boolean isPingFailed() {
+		return pingFailed;
 	}
 
 	/**
@@ -236,8 +244,10 @@ public abstract class ConnectionItem {
 	 * Connection has been established.
 	 */
 	protected void onConnected(ConnectionThread connectionThread) {
-		if (isManaged(connectionThread))
+		if (isManaged(connectionThread)) {
 			state = ConnectionState.authentication;
+			pingFailed = false;
+		}
 	}
 
 	/**
@@ -305,6 +315,11 @@ public abstract class ConnectionItem {
 			this.connectionThread = new ConnectionThread(this);
 			this.connectionThread.start(fqdn, port, useSrvLookup);
 		}
+	}
+
+	@Override
+	public void pingFailed() {
+		pingFailed = true;
 	}
 
 }
