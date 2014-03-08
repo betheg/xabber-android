@@ -19,7 +19,7 @@
     </startupClasses>
 
     <!-- Packet reply timeout in milliseconds -->
-    <packetReplyTimeout>5000</packetReplyTimeout>
+    <packetReplyTimeout>7500</packetReplyTimeout>
 
     <!-- Ping interval in seconds -->
     <defaultPingInterval>60</defaultPingInterval>
