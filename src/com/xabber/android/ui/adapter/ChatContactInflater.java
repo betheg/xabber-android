@@ -75,10 +75,10 @@ public class ChatContactInflater extends ClientContactInflater {
 				abstractContact.getAccount(), abstractContact.getUser())) {
 			contactViewHolder.panel
 					.setBackgroundResource(R.drawable.active_chat);
-			contactViewHolder.name.setTextColor(0xff696969);
-                    //activity.getResources().getColor(android.R.color.primary_text_light));
-			contactViewHolder.status.setTextColor(0xff696969);
-                    //activity.getResources().getColor(android.R.color.secondary_text_light));
+			contactViewHolder.name.setTextColor(activity.getResources()
+					.getColor(android.R.color.primary_text_light));
+			contactViewHolder.status.setTextColor(activity.getResources()
+					.getColor(android.R.color.secondary_text_light));
 		} else {
 			contactViewHolder.panel.setBackgroundDrawable(null);
 			contactViewHolder.name.setTextColor(textColorPrimary);
